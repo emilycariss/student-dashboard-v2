@@ -839,7 +839,7 @@ function buildTasks(name){
     if(!ex)by[wk].push(t);
     else if(new Date(t.Timestamp)>new Date(ex.Timestamp))Object.assign(ex,t);
   });
-  return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
+  return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0)).map(wk=>{
     const wt=by[wk];
     const dn=wt.filter(t=>t.Completed==='Completed').length;
     const wp=Math.round(dn/wt.length*100);
@@ -887,7 +887,7 @@ function buildVocab(name){
   if(!vc.length)return '<div class="empty">No vocabulary activity yet.</div>';
   const by={};
   vc.forEach(v=>{const wk=v.Week||'Week ?';if(!by[wk])by[wk]=new Set();by[wk].add(v.Word||'');});
-  return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
+  return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0)).map(wk=>{
     const words=[...by[wk]].filter(Boolean);
     return '<div style="margin-bottom:1.25rem">'+
       '<div style="font-size:12px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+
