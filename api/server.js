@@ -93,7 +93,18 @@ async function readSheet(token, sheet) {
   const json = await r.json();
   const rows = json.values || [];
   if (rows.length < 2) return [];
-  const headers = rows[0];
+  // Always use fixed headers regardless of what's in the sheet
+  let headers;
+  if (sheet === 'Task Completions') {
+    headers = ['Timestamp','Student','Week','Theme','Task','Category','Completed'];
+  } else if (sheet === 'Journal Entries') {
+    headers = ['Timestamp','Student','Week','Theme','Text','WordCount'];
+  } else if (sheet === 'Vocab Activity') {
+    headers = ['Timestamp','Student','Week','Word','Action'];
+  } else {
+    headers = rows[0];
+  }
+  // Skip the header row
   return rows.slice(1).map(row => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = row[i] || ''; });
