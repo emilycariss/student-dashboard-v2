@@ -524,6 +524,10 @@ function togJE(id,el){
   el.textContent=d.classList.contains("exp")?"Show less":"Show more";
 }
 document.getElementById("j-textarea").addEventListener("input",updateWC);
+document.getElementById("j-textarea").addEventListener("paste",function(e){
+  e.preventDefault();
+  alert("Please type your journal entry - copy and paste is not allowed.");
+});
 buildJBtns();selJWeek(1);
 // Journal expand handlers via event delegation
 document.addEventListener('click',function(e){
