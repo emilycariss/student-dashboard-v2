@@ -104,8 +104,12 @@ async function readSheet(token, sheet) {
   } else {
     headers = rows[0];
   }
-  // Skip the header row
-  return rows.slice(1).map(row => {
+  // Skip the header row, also skip any row where values match headers (duplicate header rows)
+  const dataRows = rows.slice(1).filter(row => {
+    // Skip rows that look like header rows (first cell matches a known header value)
+    return row[0] !== 'Timestamp' && row[1] !== 'Student';
+  });
+  return dataRows.map(row => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = row[i] || ''; });
     return obj;
