@@ -696,8 +696,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 const T=72;
 let D={tasks:[],journals:[],vocab:[]},students=[],cur=null;
 
-function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function fmt(ts){try{return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(x){return '';}}
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function fmt(ts){
+  try{return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+  catch(x){return '';}
+}
 
 async function loadData(){
   document.getElementById('lu').textContent='Loading...';
@@ -708,18 +713,14 @@ async function loadData(){
     D.tasks=j.tasks||[];
     D.journals=j.journals||[];
     D.vocab=j.vocab||[];
-    console.log('Data loaded - tasks:',D.tasks.length,'journals:',D.journals.length,'vocab:',D.vocab.length);
-    if(D.tasks.length>0) console.log('Sample task:',JSON.stringify(D.tasks[0]));
     const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student).filter(Boolean);
     students=[...new Set(names)].sort();
-    console.log('Students found:',students);
     if(!cur&&students.length)cur=students[0];
     document.getElementById('lu').textContent='Updated '+new Date().toLocaleTimeString();
     render();
   }catch(err){
-    console.error('loadData error:',err);
     document.getElementById('lu').textContent='Error: '+err.message;
-    document.getElementById('mc').innerHTML='<div class="empty">Could not load data: '+err.message+'</div>';
+    document.getElementById('mc').innerHTML='<div class="empty">Error: '+esc(err.message)+'</div>';
   }
 }
 
@@ -727,7 +728,9 @@ function render(){
   const done=D.tasks.filter(t=>t.Completed==='Completed');
   const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const today=new Date().toLocaleDateString();
-  const act=new Set([...D.tasks,...D.journals].filter(r=>{try{return new Date(r.Timestamp).toLocaleDateString()===today;}catch(x){return false;}}).map(r=>r.Student)).size;
+  const act=new Set([...D.tasks,...D.journals].filter(r=>{
+    try{return new Date(r.Timestamp).toLocaleDateString()===today;}catch(x){return false;}
+  }).map(r=>r.Student)).size;
   document.getElementById('ss').textContent=students.length;
   document.getElementById('st').textContent=done.length;
   document.getElementById('sj').textContent=D.journals.length;
@@ -735,17 +738,55 @@ function render(){
   document.getElementById('sv').textContent=D.vocab.length;
   document.getElementById('sa').textContent=act;
   const mc=document.getElementById('mc');
-  if(!students.length){mc.innerHTML='<div class="no-data"><strong>No student data yet</strong>Students need to open their pages and complete a task.</div>';return;}
-  const tabs=students.map(s=>'<button class="student-tab'+(s===cur?' active':'')+'" id="tab-'+e(s)+'" onclick="sel(this,\''+e(s)+'\')">'+'<span class="tab-dot '+dot(s)+'"></span>'+e(s)+'</button>').join('');
-  const panels=students.map(s=>panel(s)).join('');
-  mc.innerHTML='<div class="student-tab-row">'+tabs+'</div>'+panels;
-  openFirst();
-}
-
-function sel(btn,name){
-  cur=name;
-  document.querySelectorAll('.student-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
-  document.querySelectorAll('.student-panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+name));
+  if(!students.length){
+    mc.innerHTML='<div class="no-data"><strong>No student data yet</strong>Students need to open their pages and complete a task.</div>';
+    return;
+  }
+  // Use data-name attribute to avoid apostrophe issues in onclick
+  const tabs=students.map(s=>
+    '<button class="student-tab'+(s===cur?' active':'')+'" data-name="'+esc(s)+'">'+
+    '<span class="tab-dot '+dot(s)+'"></span>'+esc(s)+'</button>'
+  ).join('');
+  const panels=students.map(s=>buildPanel(s)).join('');
+  mc.innerHTML='<div class="student-tab-row" id="tab-row">'+tabs+'</div>'+panels;
+  // Add click handlers after DOM update
+  document.querySelectorAll('.student-tab').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      const name=this.getAttribute('data-name');
+      cur=name;
+      document.querySelectorAll('.student-tab').forEach(b=>b.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.student-panel').forEach(p=>p.classList.toggle('active',p.getAttribute('data-name')===name));
+      openFirst();
+    });
+  });
+  // Add subtab handlers
+  document.querySelectorAll('.subtab').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      const panel=this.closest('.student-panel');
+      const tab=this.getAttribute('data-tab');
+      panel.querySelectorAll('.subtab').forEach(b=>b.classList.remove('active'));
+      this.classList.add('active');
+      panel.querySelectorAll('.subview').forEach(v=>v.classList.remove('active'));
+      panel.querySelector('.subview[data-tab="'+tab+'"]').classList.add('active');
+    });
+  });
+  // Add week group toggle handlers
+  document.querySelectorAll('.wg-header').forEach(hdr=>{
+    hdr.addEventListener('click',function(){
+      const gid=this.getAttribute('data-gid');
+      const body=document.getElementById(gid);
+      const chev=document.getElementById('c-'+gid);
+      if(body){const o=body.classList.toggle('open');if(chev)chev.classList.toggle('open',o);}
+    });
+  });
+  // Add journal expand handlers
+  document.querySelectorAll('.je-expand').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      const d=document.getElementById(this.getAttribute('data-id'));
+      if(d){d.classList.toggle('expanded');this.textContent=d.classList.contains('expanded')?'Show less':'Show full entry';}
+    });
+  });
   openFirst();
 }
 
@@ -755,9 +796,7 @@ function openFirst(){
   if(b)b.classList.add('open');if(c)c.classList.add('open');
 }
 
-function gv(row,keys){for(const k of keys){if(row[k]!==undefined)return row[k];}return '';}
-
-function panel(name){
+function buildPanel(name){
   const tk=D.tasks.filter(t=>t.Student===name);
   const cp=tk.filter(t=>t.Completed==='Completed');
   const jn=D.journals.filter(j=>j.Student===name);
@@ -766,9 +805,10 @@ function panel(name){
   const pct=Math.min(Math.round(cp.length/T*100),100);
   const la=lastActive(name);
   const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-  return '<div class="student-panel'+(name===cur?' active':'')+'" id="panel-'+e(name)+'">'+
-    '<div class="student-header"><div class="sh-left"><div class="sh-avatar">'+e(ini)+'</div>'+
-    '<div><div class="sh-name">'+e(name)+'</div><div class="sh-meta">'+statusLabel(name)+' &nbsp;·&nbsp; Last active: '+(la?fmt(la):'No activity yet')+'</div></div></div>'+
+  return '<div class="student-panel'+(name===cur?' active':'')+'" data-name="'+esc(name)+'">'+
+    '<div class="student-header"><div class="sh-left"><div class="sh-avatar">'+esc(ini)+'</div>'+
+    '<div><div class="sh-name">'+esc(name)+'</div>'+
+    '<div class="sh-meta">'+esc(statusLabel(name))+' &nbsp;·&nbsp; Last active: '+(la?fmt(la):'No activity yet')+'</div></div></div>'+
     '<div class="sh-stats">'+
     '<div class="sh-stat"><span class="sh-stat-val">'+cp.length+'</span><span class="sh-stat-lbl">Tasks done</span></div>'+
     '<div class="sh-stat"><span class="sh-stat-val">'+jn.length+'</span><span class="sh-stat-lbl">Journal entries</span></div>'+
@@ -778,21 +818,14 @@ function panel(name){
     '<div class="prog-section"><div class="prog-label"><span>Overall progress</span><span>'+pct+'% ('+cp.length+' of '+T+' tasks)</span></div>'+
     '<div class="prog-wrap"><div class="prog-fill" style="width:'+pct+'%"></div></div></div>'+
     '<div class="subtab-row">'+
-    '<button class="subtab active" onclick="showSub(this,\''+e(name)+'\',\'t\')">Tasks</button>'+
-    '<button class="subtab" onclick="showSub(this,\''+e(name)+'\',\'j\')">Journal ('+jn.length+')</button>'+
-    '<button class="subtab" onclick="showSub(this,\''+e(name)+'\',\'v\')">Vocabulary ('+vc.length+')</button>'+
+    '<button class="subtab active" data-tab="t">Tasks</button>'+
+    '<button class="subtab" data-tab="j">Journal ('+jn.length+')</button>'+
+    '<button class="subtab" data-tab="v">Vocabulary ('+vc.length+')</button>'+
     '</div>'+
-    '<div class="subview active" id="t-'+e(name)+'">'+buildTasks(name)+'</div>'+
-    '<div class="subview" id="j-'+e(name)+'">'+buildJournal(name)+'</div>'+
-    '<div class="subview" id="v-'+e(name)+'">'+buildVocab(name)+'</div>'+
+    '<div class="subview active" data-tab="t">'+buildTasks(name)+'</div>'+
+    '<div class="subview" data-tab="j">'+buildJournal(name)+'</div>'+
+    '<div class="subview" data-tab="v">'+buildVocab(name)+'</div>'+
     '</div>';
-}
-
-function showSub(btn,name,tab){
-  const p=document.getElementById('panel-'+name);if(!p)return;
-  p.querySelectorAll('.subtab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
-  p.querySelectorAll('.subview').forEach(v=>v.classList.remove('active'));
-  const sv=document.getElementById(tab+'-'+name);if(sv)sv.classList.add('active');
 }
 
 function buildTasks(name){
@@ -802,56 +835,50 @@ function buildTasks(name){
   tk.forEach(t=>{
     const wk=t.Week||'Week ?';
     if(!by[wk])by[wk]=[];
-    const task=t.Task||'';
-    const ex=by[wk].find(x=>x.Task===task);
+    const ex=by[wk].find(x=>x.Task===t.Task);
     if(!ex)by[wk].push(t);
-    else if(new Date(t.Timestamp)>new Date(ex.Timestamp||ex.timestamp))Object.assign(ex,t);
+    else if(new Date(t.Timestamp)>new Date(ex.Timestamp))Object.assign(ex,t);
   });
   return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
     const wt=by[wk];
     const dn=wt.filter(t=>t.Completed==='Completed').length;
     const wp=Math.round(dn/wt.length*100);
-    const theme=e(wt[0].Theme||wt[0].weekTheme||'');
-    const gid='g'+name.replace(/\\s/g,'')+wk.replace(/\\s/g,'');
+    const theme=esc(wt[0].Theme||'');
+    const gid='g'+name.replace(/[^a-z0-9]/gi,'_')+wk.replace(/[^a-z0-9]/gi,'_');
     const bs=dn===wt.length?'background:#D1F2EB;color:#0E6655':dn>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
     const bt=dn===wt.length?'Complete':dn+'/'+wt.length+' done';
     const rows=wt.map(t=>{
       const done=t.Completed==='Completed';
       const cat=(t.Category||'').toLowerCase();
-      const ts=t.Timestamp;
-      const tname=e(t.Task||'');
       return '<div class="task-row"><div class="task-dot '+(done?'done':'undone')+'"></div>'+
-        '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+tname+'</div>'+
+        '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+esc(t.Task||'')+'</div>'+
         '<div class="task-bottom">'+(cat?'<span class="cat-pill cat-'+cat+'">'+cat+'</span>':'')+
-        (ts?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+fmt(ts)+'</span>':'')+
+        (t.Timestamp?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+fmt(t.Timestamp)+'</span>':'')+
         '</div></div></div>';
     }).join('');
     return '<div class="week-group">'+
       '<div class="wg-minibar-wrap"><div class="wg-minibar" style="width:'+wp+'%;background:'+(dn===wt.length?'#0E6655':'#1A5276')+'"></div></div>'+
-      '<div class="wg-header" onclick="tog(\''+gid+'\')"><div><div class="wg-title">'+e(wk)+'</div>'+(theme?'<div class="wg-theme">'+theme+'</div>':'')+
-      '</div><div class="wg-right"><span class="wg-badge" style="'+bs+'">'+bt+'</span><span class="wg-chev" id="c-'+gid+'">&#8964;</span></div></div>'+
+      '<div class="wg-header" data-gid="'+gid+'"><div><div class="wg-title">'+esc(wk)+'</div>'+(theme?'<div class="wg-theme">'+theme+'</div>':'')+
+      '</div><div class="wg-right"><span class="wg-badge" style="'+bs+'">'+bt+'</span>'+
+      '<span class="wg-chev" id="c-'+gid+'">&#8964;</span></div></div>'+
       '<div class="wg-body" id="'+gid+'">'+rows+'</div></div>';
   }).join('');
 }
 
 function buildJournal(name){
-  const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(b.Timestamp||b.timestamp)-new Date(a.Timestamp||a.timestamp));
+  const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp));
   if(!jn.length)return '<div class="empty">No journal entries yet.</div>';
   return jn.map((entry,i)=>{
-    const id='je-'+name.replace(/\\s/g,'')+i;
-    const week=e(entry.Week||'');
-    const theme=e(entry.Theme||'');
-    const text=e(entry.Text||'');
-    const wc=parseInt(entry.WordCount||0);
-    const ts=entry.Timestamp;
+    const id='je_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
     return '<div class="journal-entry">'+
       '<div class="je-meta"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
-      '<span class="je-week">'+week+'</span>'+(theme?'<span class="je-theme">'+theme+'</span>':'')+
+      '<span class="je-week">'+esc(entry.Week||'')+'</span>'+
+      (entry.Theme?'<span class="je-theme">'+esc(entry.Theme)+'</span>':'')+
       '</div><div style="display:flex;align-items:center;gap:8px">'+
-      (wc?'<span class="je-wc">'+wc+' words</span>':'')+
-      '<span class="je-date">'+fmt(ts)+'</span></div></div>'+
-      '<div class="je-text" id="'+id+'">'+text+'</div>'+
-      '<span class="je-expand" onclick="togJ(\''+id+'\',this)">Show full entry</span></div>';
+      (entry.WordCount?'<span class="je-wc">'+entry.WordCount+' words</span>':'')+
+      '<span class="je-date">'+fmt(entry.Timestamp)+'</span></div></div>'+
+      '<div class="je-text" id="'+id+'">'+esc(entry.Text||'')+'</div>'+
+      '<span class="je-expand" data-id="'+id+'">Show full entry</span></div>';
   }).join('');
 }
 
@@ -862,19 +889,21 @@ function buildVocab(name){
   vc.forEach(v=>{const wk=v.Week||'Week ?';if(!by[wk])by[wk]=new Set();by[wk].add(v.Word||'');});
   return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
     const words=[...by[wk]].filter(Boolean);
-    return '<div style="margin-bottom:1.25rem"><div style="font-size:12px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+e(wk)+' &nbsp;·&nbsp; '+words.length+' words studied</div>'+
-      '<div class="vocab-grid">'+words.map(w=>'<div class="vocab-card"><div class="vc-word">'+e(w)+'</div></div>').join('')+'</div></div>';
+    return '<div style="margin-bottom:1.25rem">'+
+      '<div style="font-size:12px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+
+      esc(wk)+' &nbsp;·&nbsp; '+words.length+' words studied</div>'+
+      '<div class="vocab-grid">'+words.map(w=>'<div class="vocab-card"><div class="vc-word">'+esc(w)+'</div></div>').join('')+'</div></div>';
   }).join('');
 }
 
 function lastActive(name){
-  const all=[...D.tasks,...D.journals,...D.vocab].filter(r=>r.Student===name).map(r=>{try{return new Date(r.Timestamp);}catch(x){return null;}}).filter(d=>d&&!isNaN(d));
+  const all=[...D.tasks,...D.journals,...D.vocab].filter(r=>r.Student===name).map(r=>{
+    try{return new Date(r.Timestamp);}catch(x){return null;}
+  }).filter(d=>d&&!isNaN(d));
   return all.length?new Date(Math.max(...all)):null;
 }
 function dot(name){const la=lastActive(name);if(!la)return 'dot-none';const h=(Date.now()-la)/3600000;return h<24?'dot-active':h<72?'dot-recent':'dot-inactive';}
 function statusLabel(name){const la=lastActive(name);if(!la)return 'No activity yet';const h=(Date.now()-la)/3600000;return h<24?'Active today':h<72?'Active recently':'Not active in 3+ days';}
-function tog(id){const b=document.getElementById(id),c=document.getElementById('c-'+id);if(!b)return;const o=b.classList.toggle('open');if(c)c.classList.toggle('open',o);}
-function togJ(id,el){const d=document.getElementById(id);if(!d)return;d.classList.toggle('expanded');el.textContent=d.classList.contains('expanded')?'Show less':'Show full entry';}
 
 setInterval(loadData,30000);
 loadData();
