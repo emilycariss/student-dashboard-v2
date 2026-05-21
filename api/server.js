@@ -92,28 +92,26 @@ async function readSheet(token, sheet) {
   });
   const json = await r.json();
   const rows = json.values || [];
-  if (rows.length < 2) return [];
-  // Always use fixed headers regardless of what's in the sheet
-  let headers;
+  if (!rows.length) return [];
+
+  // Use fixed column positions - no header row in sheet
   if (sheet === 'Task Completions') {
-    headers = ['Timestamp','Student','Week','Theme','Task','Category','Completed'];
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
+      Theme: row[3]||'', Task: row[4]||'', Category: row[5]||'', Completed: row[6]||''
+    })).filter(r => r.Student && r.Student !== 'Student');
   } else if (sheet === 'Journal Entries') {
-    headers = ['Timestamp','Student','Week','Theme','Text','WordCount'];
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
+      Theme: row[3]||'', Text: row[4]||'', WordCount: row[5]||0
+    })).filter(r => r.Student && r.Student !== 'Student');
   } else if (sheet === 'Vocab Activity') {
-    headers = ['Timestamp','Student','Week','Word','Action'];
-  } else {
-    headers = rows[0];
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
+      Word: row[3]||'', Action: row[4]||''
+    })).filter(r => r.Student && r.Student !== 'Student');
   }
-  // Skip the header row, also skip any row where values match headers (duplicate header rows)
-  const dataRows = rows.slice(1).filter(row => {
-    // Skip rows that look like header rows (first cell matches a known header value)
-    return row[0] !== 'Timestamp' && row[1] !== 'Student';
-  });
-  return dataRows.map(row => {
-    const obj = {};
-    headers.forEach((h, i) => { obj[h] = row[i] || ''; });
-    return obj;
-  });
+  return [];
 }
 
 // ── API: receive student data ─────────────────────────────────────────────────
