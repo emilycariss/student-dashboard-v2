@@ -516,7 +516,7 @@ function renderJHist(num){
   c.innerHTML='<div class="j-hist-lbl">Previous entries</div>'+entries.map((e,i)=>
     '<div class="j-entry"><div class="j-entry-date">'+e.date+'</div>'+
     '<div class="j-entry-text" id="jhe-'+num+'-'+i+'">'+e.text+'</div>'+
-    '<span class="j-exp" onclick="togJE(\'jhe-'+num+'-'+i+'\',this)">Show more</span></div>'
+    '<span class="j-exp" data-id="jhe-'+num+'-'+i+'">Show more</span></div>'
   ).join("");
 }
 function togJE(id,el){
@@ -525,6 +525,14 @@ function togJE(id,el){
 }
 document.getElementById("j-textarea").addEventListener("input",updateWC);
 buildJBtns();selJWeek(1);
+// Journal expand handlers via event delegation
+document.addEventListener('click',function(e){
+  if(e.target.classList.contains('j-exp')){
+    const id=e.target.getAttribute('data-id');
+    const d=document.getElementById(id);
+    if(d){d.classList.toggle('exp');e.target.textContent=d.classList.contains('exp')?'Show less':'Show more';}
+  }
+});
 
 // ── VOCAB ─────────────────────────────────────────────────────────────────────
 let cvw=1,fci=0,fcFlipped=false,vMode="flash";
