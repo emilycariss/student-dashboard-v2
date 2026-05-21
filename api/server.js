@@ -705,23 +705,29 @@ async function loadData(){
     const r=await fetch('/api/data?t='+Date.now());
     const j=await r.json();
     if(j.error)throw new Error(j.error);
-    D.tasks=j.tasks||[];D.journals=j.journals||[];D.vocab=j.vocab||[];
-    const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student||x.student).filter(Boolean);
+    D.tasks=j.tasks||[];
+    D.journals=j.journals||[];
+    D.vocab=j.vocab||[];
+    console.log('Data loaded - tasks:',D.tasks.length,'journals:',D.journals.length,'vocab:',D.vocab.length);
+    if(D.tasks.length>0) console.log('Sample task:',JSON.stringify(D.tasks[0]));
+    const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student).filter(Boolean);
     students=[...new Set(names)].sort();
+    console.log('Students found:',students);
     if(!cur&&students.length)cur=students[0];
     document.getElementById('lu').textContent='Updated '+new Date().toLocaleTimeString();
     render();
   }catch(err){
+    console.error('loadData error:',err);
     document.getElementById('lu').textContent='Error: '+err.message;
     document.getElementById('mc').innerHTML='<div class="empty">Could not load data: '+err.message+'</div>';
   }
 }
 
 function render(){
-  const done=D.tasks.filter(t=>(t.Completed||t.completed)==='Completed'||t.completed===true);
-  const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount||j.wordCount)||0),0);
+  const done=D.tasks.filter(t=>t.Completed==='Completed');
+  const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const today=new Date().toLocaleDateString();
-  const act=new Set([...D.tasks,...D.journals].filter(r=>{try{return new Date(r.Timestamp||r.timestamp).toLocaleDateString()===today;}catch(x){return false;}}).map(r=>r.Student||r.student)).size;
+  const act=new Set([...D.tasks,...D.journals].filter(r=>{try{return new Date(r.Timestamp).toLocaleDateString()===today;}catch(x){return false;}}).map(r=>r.Student)).size;
   document.getElementById('ss').textContent=students.length;
   document.getElementById('st').textContent=done.length;
   document.getElementById('sj').textContent=D.journals.length;
@@ -752,11 +758,11 @@ function openFirst(){
 function gv(row,keys){for(const k of keys){if(row[k]!==undefined)return row[k];}return '';}
 
 function panel(name){
-  const tk=D.tasks.filter(t=>(t.Student||t.student)===name);
-  const cp=tk.filter(t=>(t.Completed||t.completed)==='Completed'||t.completed===true);
-  const jn=D.journals.filter(j=>(j.Student||j.student)===name);
-  const vc=D.vocab.filter(v=>(v.Student||v.student)===name);
-  const wd=jn.reduce((s,j)=>s+(parseInt(j.WordCount||j.wordCount)||0),0);
+  const tk=D.tasks.filter(t=>t.Student===name);
+  const cp=tk.filter(t=>t.Completed==='Completed');
+  const jn=D.journals.filter(j=>j.Student===name);
+  const vc=D.vocab.filter(v=>v.Student===name);
+  const wd=jn.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const pct=Math.min(Math.round(cp.length/T*100),100);
   const la=lastActive(name);
   const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -790,30 +796,30 @@ function showSub(btn,name,tab){
 }
 
 function buildTasks(name){
-  const tk=D.tasks.filter(t=>(t.Student||t.student)===name);
+  const tk=D.tasks.filter(t=>t.Student===name);
   if(!tk.length)return '<div class="empty">No task activity yet.</div>';
   const by={};
   tk.forEach(t=>{
-    const wk=t.Week||t.week||'Week ?';
+    const wk=t.Week||'Week ?';
     if(!by[wk])by[wk]=[];
-    const task=t.Task||t.task||t.taskTitle||'';
-    const ex=by[wk].find(x=>(x.Task||x.task||x.taskTitle||'')=== task);
+    const task=t.Task||'';
+    const ex=by[wk].find(x=>x.Task===task);
     if(!ex)by[wk].push(t);
-    else if(new Date(t.Timestamp||t.timestamp)>new Date(ex.Timestamp||ex.timestamp))Object.assign(ex,t);
+    else if(new Date(t.Timestamp)>new Date(ex.Timestamp||ex.timestamp))Object.assign(ex,t);
   });
   return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
     const wt=by[wk];
-    const dn=wt.filter(t=>(t.Completed||t.completed)==='Completed'||t.completed===true).length;
+    const dn=wt.filter(t=>t.Completed==='Completed').length;
     const wp=Math.round(dn/wt.length*100);
     const theme=e(wt[0].Theme||wt[0].weekTheme||'');
     const gid='g'+name.replace(/\\s/g,'')+wk.replace(/\\s/g,'');
     const bs=dn===wt.length?'background:#D1F2EB;color:#0E6655':dn>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
     const bt=dn===wt.length?'Complete':dn+'/'+wt.length+' done';
     const rows=wt.map(t=>{
-      const done=(t.Completed||t.completed)==='Completed'||t.completed===true;
-      const cat=(t.Category||t.category||'').toLowerCase();
-      const ts=t.Timestamp||t.timestamp;
-      const tname=e(t.Task||t.task||t.taskTitle||'');
+      const done=t.Completed==='Completed';
+      const cat=(t.Category||'').toLowerCase();
+      const ts=t.Timestamp;
+      const tname=e(t.Task||'');
       return '<div class="task-row"><div class="task-dot '+(done?'done':'undone')+'"></div>'+
         '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+tname+'</div>'+
         '<div class="task-bottom">'+(cat?'<span class="cat-pill cat-'+cat+'">'+cat+'</span>':'')+
@@ -829,15 +835,15 @@ function buildTasks(name){
 }
 
 function buildJournal(name){
-  const jn=D.journals.filter(j=>(j.Student||j.student)===name).sort((a,b)=>new Date(b.Timestamp||b.timestamp)-new Date(a.Timestamp||a.timestamp));
+  const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(b.Timestamp||b.timestamp)-new Date(a.Timestamp||a.timestamp));
   if(!jn.length)return '<div class="empty">No journal entries yet.</div>';
   return jn.map((entry,i)=>{
     const id='je-'+name.replace(/\\s/g,'')+i;
-    const week=e(entry.Week||entry.week||'');
-    const theme=e(entry.Theme||entry.weekTheme||'');
-    const text=e(entry.Text||entry.text||'');
-    const wc=parseInt(entry.WordCount||entry.wordCount||0);
-    const ts=entry.Timestamp||entry.timestamp;
+    const week=e(entry.Week||'');
+    const theme=e(entry.Theme||'');
+    const text=e(entry.Text||'');
+    const wc=parseInt(entry.WordCount||0);
+    const ts=entry.Timestamp;
     return '<div class="journal-entry">'+
       '<div class="je-meta"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
       '<span class="je-week">'+week+'</span>'+(theme?'<span class="je-theme">'+theme+'</span>':'')+
@@ -850,10 +856,10 @@ function buildJournal(name){
 }
 
 function buildVocab(name){
-  const vc=D.vocab.filter(v=>(v.Student||v.student)===name);
+  const vc=D.vocab.filter(v=>v.Student===name);
   if(!vc.length)return '<div class="empty">No vocabulary activity yet.</div>';
   const by={};
-  vc.forEach(v=>{const wk=v.Week||v.week||'Week ?';if(!by[wk])by[wk]=new Set();by[wk].add(v.Word||v.word||'');});
+  vc.forEach(v=>{const wk=v.Week||'Week ?';if(!by[wk])by[wk]=new Set();by[wk].add(v.Word||'');});
   return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/\D/g,''))||0)-(parseInt(b.replace(/\D/g,''))||0)).map(wk=>{
     const words=[...by[wk]].filter(Boolean);
     return '<div style="margin-bottom:1.25rem"><div style="font-size:12px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+e(wk)+' &nbsp;·&nbsp; '+words.length+' words studied</div>'+
@@ -862,7 +868,7 @@ function buildVocab(name){
 }
 
 function lastActive(name){
-  const all=[...D.tasks,...D.journals,...D.vocab].filter(r=>(r.Student||r.student)===name).map(r=>{try{return new Date(r.Timestamp||r.timestamp);}catch(x){return null;}}).filter(d=>d&&!isNaN(d));
+  const all=[...D.tasks,...D.journals,...D.vocab].filter(r=>r.Student===name).map(r=>{try{return new Date(r.Timestamp);}catch(x){return null;}}).filter(d=>d&&!isNaN(d));
   return all.length?new Date(Math.max(...all)):null;
 }
 function dot(name){const la=lastActive(name);if(!la)return 'dot-none';const h=(Date.now()-la)/3600000;return h<24?'dot-active':h<72?'dot-recent':'dot-inactive';}
