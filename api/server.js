@@ -111,6 +111,12 @@ async function readSheet(token, sheet) {
       Word: row[3]||'', Action: row[4]||''
     })).filter(r => r.Student && r.Student !== 'Student');
   }
+  } else if (sheet === 'Feedback') {
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
+      EntryIndex: row[3]||'', FeedbackText: row[4]||'', Grade: row[5]||'', Published: row[6]||''
+    })).filter(r => r.Student && r.Student !== 'Student');
+  }
   return [];
 }
 
@@ -281,6 +287,14 @@ textarea.j-input:focus{border-color:#1A5276}
 .word-def{font-size:13px;color:#555;line-height:1.5}
 .vocab-all-note{background:#FFF9F0;border:1.5px solid #FDEBD0;border-radius:10px;padding:0.85rem 1rem;margin-bottom:1rem;font-size:13px;color:#777;line-height:1.6}
 .vocab-all-note strong{color:#BA4A00}
+.fb-received{margin-top:0.85rem;padding:0.85rem 1rem;background:linear-gradient(135deg,#f0f7ff,#f0fdf7);border-radius:8px;border-left:4px solid #1A5276}
+.fb-received-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem}
+.fb-received-label{font-size:11px;font-weight:700;color:#1A5276;text-transform:uppercase;letter-spacing:0.05em}
+.fb-received-grade{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+.grade-excellent{background:#D1F2EB;color:#0E6655}
+.grade-good{background:#D6EAF8;color:#1A5276}
+.grade-developing{background:#FCF3CF;color:#7D6608}
+.fb-received-text{font-size:13px;color:#333;line-height:1.7}
 </style>
 </head>
 <body>
@@ -513,11 +527,21 @@ function renderJHist(num){
   const entries=state["je_"+num]||[];
   const c=document.getElementById("j-history");
   if(!entries.length){c.innerHTML="";return;}
-  c.innerHTML='<div class="j-hist-lbl">Previous entries</div>'+entries.map((e,i)=>
-    '<div class="j-entry"><div class="j-entry-date">'+e.date+'</div>'+
-    '<div class="j-entry-text" id="jhe-'+num+'-'+i+'">'+e.text+'</div>'+
-    '<span class="j-exp" data-id="jhe-'+num+'-'+i+'">Show more</span></div>'
-  ).join("");
+  c.innerHTML='<div class="j-hist-lbl">Previous entries</div>'+entries.map((e,i)=>{
+    const gradeClass = e.grade ? 'grade-'+e.grade.toLowerCase() : '';
+    const feedbackHtml = e.feedback ?
+      '<div class="fb-received">'+
+        '<div class="fb-received-header">'+
+          '<span class="fb-received-label">Teacher feedback</span>'+
+          (e.grade ? '<span class="fb-received-grade '+gradeClass+'">'+e.grade+'</span>' : '')+
+        '</div>'+
+        '<div class="fb-received-text">'+e.feedback+'</div>'+
+      '</div>' : '';
+    return '<div class="j-entry"><div class="j-entry-date">'+e.date+'</div>'+
+      '<div class="j-entry-text" id="jhe-'+num+'-'+i+'">'+e.text+'</div>'+
+      '<span class="j-exp" data-id="jhe-'+num+'-'+i+'">Show more</span>'+
+      feedbackHtml+'</div>';
+  }).join("");
 }
 function togJE(id,el){
   const d=document.getElementById(id);d.classList.toggle("exp");
@@ -529,6 +553,35 @@ document.getElementById("j-textarea").addEventListener("paste",function(e){
   alert("Please type your journal entry - copy and paste is not allowed.");
 });
 buildJBtns();selJWeek(1);
+
+// ── Load and display teacher feedback ─────────────────────────────────────────
+async function loadFeedback() {
+  try {
+    const r = await fetch(window.location.origin + '/api/feedback/' + encodeURIComponent(STUDENT_NAME) + '?t=' + Date.now());
+    const j = await r.json();
+    const feedbackList = j.feedback || [];
+    feedbackList.filter(f => f.Published === 'Yes').forEach(fb => {
+      // Find matching journal entry display
+      const weekNum = parseInt((fb.Week||'').replace(/[^0-9]/g,''));
+      const entryIdx = parseInt(fb.EntryIndex || 0);
+      if(!isNaN(weekNum)) {
+        const entries = state['je_' + weekNum] || [];
+        const entry = entries[entryIdx];
+        if(entry) {
+          // Mark entry as having feedback
+          entry.feedback = fb.FeedbackText;
+          entry.grade = fb.Grade;
+        }
+        state['je_' + weekNum] = entries;
+      }
+    });
+    // Re-render current journal week if feedback arrived
+    renderJHist(cjw);
+  } catch(e) {
+    console.log('Feedback load failed:', e);
+  }
+}
+loadFeedback();
 // Journal expand handlers via event delegation
 document.addEventListener('click',function(e){
   if(e.target.classList.contains('j-exp')){
@@ -681,6 +734,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .no-data{background:#FFF9F0;border:1.5px solid #FDEBD0;border-radius:12px;padding:1.25rem;text-align:center;color:#BA4A00;font-size:13px;margin-bottom:1rem}
 .no-data strong{display:block;font-size:15px;margin-bottom:4px;color:#7D6608}
 .dot-active{background:#0E6655}.dot-recent{background:#F39C12}.dot-inactive{background:#E74C3C}.dot-none{background:#ccc}
+.fb-section{margin-top:1rem;padding-top:1rem;border-top:1px solid #f0f0f0}
+.fb-header{margin-bottom:0.5rem}
+.fb-status{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+.fb-status.draft{background:#FFF9F0;color:#BA4A00;border:1px solid #FDEBD0}
+.fb-status.published{background:#D1F2EB;color:#0E6655;border:1px solid #A9DFBF}
+.fb-controls{display:flex;flex-direction:column;gap:8px}
+.fb-grade-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fb-label{font-size:12px;color:#777;font-weight:500}
+.fb-grade{padding:4px 8px;font-size:12px;border:1.5px solid #ddd;border-radius:6px;background:#fff;color:#444;outline:none}
+.fb-grade:focus{border-color:#1A5276}
+.fb-ai-btn{padding:4px 10px;font-size:12px;font-weight:500;border:1.5px solid #6C3483;border-radius:6px;background:#F4ECF7;color:#6C3483;cursor:pointer;white-space:nowrap}
+.fb-ai-btn:hover{background:#E8DAEF}
+.fb-ai-btn:disabled{opacity:0.5;cursor:wait}
+.fb-textarea{width:100%;min-height:100px;border:1.5px solid #e0e6ed;border-radius:8px;padding:0.65rem;font-size:13px;font-family:inherit;color:#333;line-height:1.6;resize:vertical;outline:none}
+.fb-textarea:focus{border-color:#1A5276}
+.fb-btn-row{display:flex;align-items:center;justify-content:space-between}
+.fb-saved-msg{font-size:11px;color:#0E6655}
+.fb-publish-btn{padding:6px 16px;background:#1A5276;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+.fb-publish-btn:hover{background:#154360}
+.fb-publish-btn.published{background:#0E6655}
+.fb-publish-btn.published:hover{background:#0a4f3d}
 </style>
 </head>
 <body>
@@ -753,6 +827,106 @@ function fmt(ts){
   }catch(x){return '';}
 }
 
+// Feedback draft storage (local, not yet published)
+const fbDrafts = {};
+
+function saveFbDraft(fbId) {
+  fbDrafts[fbId] = {
+    text: document.getElementById('text_'+fbId)?.value || '',
+    grade: document.getElementById('grade_'+fbId)?.value || ''
+  };
+  const msg = document.getElementById('saved_'+fbId);
+  if(msg){ msg.textContent = 'Draft saved'; setTimeout(()=>{ if(msg) msg.textContent=''; }, 2000); }
+}
+
+async function publishFeedback(fbId, studentName, week, entryIndex) {
+  const text = document.getElementById('text_'+fbId)?.value?.trim();
+  const grade = document.getElementById('grade_'+fbId)?.value;
+  if(!text){ alert('Please write some feedback before publishing.'); return; }
+  const btn = document.querySelector('[onclick*="'+fbId+'"][class*="publish"]');
+  if(btn){ btn.textContent = 'Publishing...'; btn.disabled = true; }
+  try {
+    const r = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student: studentName, week, entryIndex, feedbackText: text, grade, published: true })
+    });
+    const j = await r.json();
+    if(j.error) throw new Error(j.error);
+    await loadData(); // Refresh to show published state
+  } catch(e) {
+    alert('Error publishing: ' + e.message);
+    if(btn){ btn.textContent = 'Publish feedback'; btn.disabled = false; }
+  }
+}
+
+async function generateFeedback(fbId, entryIndex, studentName, week) {
+  const btn = document.querySelector('#btn_'+fbId) || document.querySelector('[onclick*="generateFeedback"][onclick*="'+fbId+'"]');
+  const textarea = document.getElementById('text_'+fbId);
+  const gradeEl = document.getElementById('grade_'+fbId);
+  if(!textarea) return;
+
+  // Get the journal text
+  const journalEl = document.querySelector('.je-text[id*="'+studentName.replace(/[^a-z0-9]/gi,'_')+'_'+entryIndex+'"]');
+  const journalText = journalEl ? journalEl.textContent : '';
+  if(!journalText.trim()){ alert('No journal text found.'); return; }
+
+  // Find writing prompt for this week
+  const weekNum = parseInt((week||'').replace(/\D/g,''));
+  const prompts = {
+    1:'Write 5 sentences about what you want to achieve this summer. What is your biggest goal for the future?',
+    2:'Write 3 words you found difficult this week. Break each one into parts.',
+    3:'How did reading aloud feel this week? Write about one passage you read.',
+    4:'Write a paragraph using at least 5 new vocabulary words.',
+    5:'Describe your skimming and scanning practice this week.',
+    6:'Write about a time you had to make a difficult decision.',
+    7:'Write a 5-6 sentence summary of The Distracted Teenage Brain.',
+    8:'Write 3 paragraphs arguing whether students should have homework during summer.',
+    9:'Write an analytical paragraph explaining how an author uses a literary device.',
+    10:'Write a full-page response to The Landlady by Roald Dahl.',
+    11:'Write a 5-paragraph essay: What does it take to achieve a dream?',
+    12:'Write a letter to yourself about what you learned this summer.'
+  };
+  const prompt = prompts[weekNum] || 'Respond to the weekly writing prompt.';
+
+  // Disable button
+  const allBtns = document.querySelectorAll('.fb-ai-btn');
+  allBtns.forEach(b=>{ if(b.onclick && b.onclick.toString().includes(fbId)){ b.disabled=true; b.textContent='Generating...'; } });
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: 'You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional.\n\nWriting prompt: '+prompt+'\n\nStudent response:\n'+journalText+'\n\nPlease provide:\n1. A brief overall comment on how well they responded to the prompt (2-3 sentences)\n2. One specific strength in their writing with an example from their text\n3. One clear, actionable improvement suggestion\n4. A suggested grade: Excellent (fully meets expectations with strong writing), Good (meets expectations), or Developing (partially meets expectations)\n\nFormat your response as:\nFEEDBACK: [your 3-part feedback in 4-6 sentences total, written directly to the student as "you"]\nGRADE: [Excellent/Good/Developing]'
+        }]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || '';
+    
+    // Parse feedback and grade
+    const feedbackMatch = reply.match(/FEEDBACK:\s*([\s\S]*?)(?=GRADE:|$)/i);
+    const gradeMatch = reply.match(/GRADE:\s*(Excellent|Good|Developing)/i);
+    
+    if(feedbackMatch && feedbackMatch[1].trim()) {
+      textarea.value = feedbackMatch[1].trim();
+      saveFbDraft(fbId);
+    }
+    if(gradeMatch && gradeEl) {
+      gradeEl.value = gradeMatch[1];
+    }
+  } catch(e) {
+    alert('AI suggestion failed: ' + e.message);
+  } finally {
+    allBtns.forEach(b=>{ if(b.onclick && b.onclick.toString().includes(fbId)){ b.disabled=false; b.textContent='✨ AI suggestion'; } });
+  }
+}
+
 async function loadData(){
   document.getElementById('lu').textContent='Loading...';
   try{
@@ -762,6 +936,17 @@ async function loadData(){
     D.tasks=j.tasks||[];
     D.journals=j.journals||[];
     D.vocab=j.vocab||[];
+    // Load feedback for all students
+    if(students.length > 0) {
+      D.feedback = [];
+      await Promise.all(students.map(async s => {
+        try {
+          const fr = await fetch('/api/feedback/'+encodeURIComponent(s)+'?t='+Date.now());
+          const fj = await fr.json();
+          D.feedback = [...(D.feedback||[]), ...(fj.feedback||[])];
+        } catch(e) {}
+      }));
+    }
     const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student).filter(Boolean);
     students=[...new Set(names)].sort();
     if(!cur&&students.length)cur=students[0];
@@ -923,21 +1108,65 @@ function buildTasks(name){
 }
 
 function buildJournal(name){
-  const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(b.Timestamp)-new Date(a.Timestamp));
+  const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(parseTs(b.Timestamp))-new Date(parseTs(a.Timestamp)));
   if(!jn.length)return '<div class="empty">No journal entries yet.</div>';
+
+  // Get feedback for this student
+  const studentFeedback = D.feedback ? D.feedback.filter(f=>f.Student===name) : [];
+
   return jn.map((entry,i)=>{
     const id='je_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
+    const week=esc(entry.Week||'');
+    const theme=esc(entry.Theme||'');
+    const text=esc(entry.Text||'');
+    const wc=parseInt(entry.WordCount||0);
+    const ts=fmt(entry.Timestamp);
+
+    // Check existing feedback
+    const fb = studentFeedback.find(f=>f.Week===entry.Week&&f.EntryIndex===String(i));
+    const fbText = fb ? fb.FeedbackText : '';
+    const fbGrade = fb ? fb.Grade : '';
+    const fbPublished = fb ? fb.Published === 'Yes' : false;
+    const fbId = 'fb_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
+
     return '<div class="journal-entry">'+
       '<div class="je-meta"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
-      '<span class="je-week">'+esc(entry.Week||'')+'</span>'+
-      (entry.Theme?'<span class="je-theme">'+esc(entry.Theme)+'</span>':'')+
+      '<span class="je-week">'+week+'</span>'+(theme?'<span class="je-theme">'+theme+'</span>':'')+
       '</div><div style="display:flex;align-items:center;gap:8px">'+
-      (entry.WordCount?'<span class="je-wc">'+entry.WordCount+' words</span>':'')+
-      '<span class="je-date">'+fmt(entry.Timestamp)+'</span></div></div>'+
-      '<div class="je-text" id="'+id+'">'+esc(entry.Text||'')+'</div>'+
-      '<span class="je-expand" data-id="'+id+'">Show full entry</span></div>';
+      (wc?'<span class="je-wc">'+wc+' words</span>':'')+
+      '<span class="je-date">'+ts+'</span></div></div>'+
+      '<div class="je-text" id="'+id+'">'+text+'</div>'+
+      '<span class="je-expand" data-id="'+id+'">Show full entry</span>'+
+
+      // Feedback section
+      '<div class="fb-section">'+
+      '<div class="fb-header">'+
+        (fbPublished ? '<span class="fb-status published">Feedback published</span>' : '<span class="fb-status draft">Draft feedback</span>')+
+      '</div>'+
+      '<div class="fb-controls">'+
+        '<div class="fb-grade-row">'+
+          '<label class="fb-label">Grade:</label>'+
+          '<select class="fb-grade" id="grade_'+fbId+'" onchange="saveFbDraft(''+fbId+'')">'+
+            '<option value="">-- Select --</option>'+
+            '<option value="Excellent"'+(fbGrade==='Excellent'?' selected':'')+'>Excellent</option>'+
+            '<option value="Good"'+(fbGrade==='Good'?' selected':'')+'>Good</option>'+
+            '<option value="Developing"'+(fbGrade==='Developing'?' selected':'')+'>Developing</option>'+
+          '</select>'+
+          '<button class="fb-ai-btn" onclick="generateFeedback(''+fbId+'','+i+',''+name.replace(/'/g,'\x27')+'',''+week.replace(/'/g,'\x27')+'')" title="Generate AI feedback suggestion">✨ AI suggestion</button>'+
+        '</div>'+
+        '<textarea class="fb-textarea" id="text_'+fbId+'" placeholder="Write your feedback here..." oninput="saveFbDraft(''+fbId+'')">'+(fbText)+'</textarea>'+
+        '<div class="fb-btn-row">'+
+          '<span class="fb-saved-msg" id="saved_'+fbId+'"></span>'+
+          '<button class="fb-publish-btn'+(fbPublished?' published':'')+'" onclick="publishFeedback(''+fbId+'',''+name.replace(/'/g,'\x27')+'',''+week.replace(/'/g,'\x27')+'','+i+')">'+
+            (fbPublished ? '✓ Published' : 'Publish feedback')+
+          '</button>'+
+        '</div>'+
+      '</div>'+
+      '</div>'+
+      '</div>';
   }).join('');
 }
+
 
 function buildVocab(name){
   const vc=D.vocab.filter(v=>v.Student===name);
