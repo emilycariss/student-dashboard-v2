@@ -706,6 +706,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <script>
 const T=72;
+const WEEKS_ALL=[
+{num:1,theme:"Getting Started",tasks:["ReadTheory - complete your placement test","CommonLit - read your first free-choice passage","IXL - complete the English Diagnostic","Khan Academy - Grammar Unit 1: Parts of speech - the noun","Quizlet - set up your account and study Week 1 word set","Journal - write your summer goals"]},
+{num:2,theme:"Phonics and Decoding",tasks:["CommonLit - The Jacket by Gary Soto","ReadTheory - complete 5 quizzes","Khan Academy - Grammar Unit 2: Parts of speech - the verb","IXL - Prefixes and suffixes","Quizlet - Week 2 set: roots and affixes","Decoding practice - break words before looking them up"]},
+{num:3,theme:"Reading Fluency",tasks:["CommonLit - The Ravine by Graham Salisbury","ReadTheory - complete 5 quizzes and note your Lexile score","Khan Academy - Grammar Unit 4: Parts of speech - the modifier","IXL - Reading comprehension skills","Quizlet - Week 3 set: words about reading","Read aloud - 15 minutes every morning"]},
+{num:4,theme:"Vocabulary Building",tasks:["CommonLit - Soccer Speaks Many Languages by Dianna Geers","ReadTheory - complete 5 quizzes","Khan Academy ELA - Word meanings: fiction 7","IXL - Vocabulary in context","Quizlet - Week 4 set: Tier 2 academic words","Journal - write a paragraph using 5 new words"]},
+{num:5,theme:"Comprehension Strategies",tasks:["CommonLit - The Danger of a Single Story by Adichie","ReadTheory - complete 5 quizzes","Khan Academy ELA - Text structure: history 7","IXL - Reading strategies skills","Quizlet - Week 5 set: words about comprehension","Skimming and scanning practice"]},
+{num:6,theme:"Grammar for Writing",tasks:["CommonLit - Justice for All by Lynn Rymarz","ReadTheory - complete 5 quizzes","Khan Academy - Grammar Unit 6: Punctuation - comma and apostrophe","IXL - Sentence structure skills","Quizlet - Week 6 set: grammar and writing words","Journal - write 3 entries this week"]},
+{num:7,theme:"Reading for Information",tasks:["CommonLit - The Pedestrian by Ray Bradbury","CommonLit - The Distracted Teenage Brain","ReadTheory - complete 5 quizzes","Khan Academy ELA - Author's purpose: informational texts 7","IXL - Informational text skills","Quizlet - Week 7 set: words about non-fiction"]},
+{num:8,theme:"Argument and Evidence",tasks:["CommonLit - Anti-Social Networks","CommonLit - Turning the Tide by Shay Maunz","ReadTheory - complete 5 quizzes","Khan Academy ELA - Evaluate an argument 7","IXL - Fact and opinion","Journal - write a short argument"]},
+{num:9,theme:"Author's Craft",tasks:["CommonLit - The Story of an Hour by Kate Chopin","CommonLit - The Veldt by Ray Bradbury","ReadTheory - complete 5 quizzes","Khan Academy ELA - Point of view: creative fiction 7","IXL - Literary devices: figurative language","Journal - write your first analytical paragraph"]},
+{num:10,theme:"Extended Reading",tasks:["CommonLit - The Landlady by Roald Dahl","CommonLit - The Wright Brothers: Air Pioneers","ReadTheory - complete 5 quizzes","Khan Academy ELA - Key ideas: science 7","IXL - Drawing conclusions and making inferences","Quizlet - Week 10 set: words about inference"]},
+{num:11,theme:"Grade 10 ELA Preparation",tasks:["CommonLit - The Necklace by Guy de Maupassant","CommonLit - Life Isn't Fair - Deal With It","ReadTheory - complete 5 quizzes","Khan Academy - Grammar Course Challenge","IXL - revisit your 3 weakest skills from Week 1","Journal - write your first 5-paragraph essay"]},
+{num:12,theme:"Final Review",tasks:["ReadTheory - re-take your placement quiz","CommonLit - your free-choice final passage","Khan Academy - Grammar Course Challenge re-attempt","IXL - revisit any skill still below Smart Score 80","Vocabulary - go back through all 12 weeks","Journal - write a letter to yourself"]}
+];
 let D={tasks:[],journals:[],vocab:[]},students=[],cur=null;
 
 function esc(s){
@@ -865,40 +879,46 @@ function buildPanel(name){
 
 function buildTasks(name){
   const tk=D.tasks.filter(t=>t.Student===name);
-  if(!tk.length)return '<div class="empty">No task activity yet.</div>';
-  const by={};
-  // Sort by timestamp first so we always keep the most recent entry per task
-  const sorted = [...tk].sort((a,b)=>new Date(a.Timestamp)-new Date(b.Timestamp));
+  
+  // Build a lookup of most recent status per task
+  const taskStatus={};
+  const sorted=[...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp)));
   sorted.forEach(t=>{
-    const wk=t.Week||'Week ?';
-    if(!by[wk])by[wk]=[];
-    const ex=by[wk].find(x=>x.Task===t.Task);
-    if(!ex)by[wk].push(t);
-    else Object.assign(ex,t); // Always overwrite with more recent entry
+    const key=(t.Week||'')+'||'+(t.Task||'');
+    taskStatus[key]={completed:t.Completed==='Completed',timestamp:t.Timestamp};
   });
-  return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0)).map(wk=>{
-    const wt=by[wk];
-    const dn=wt.filter(t=>t.Completed==='Completed').length;
-    const wp=Math.round(dn/wt.length*100);
-    const theme=esc(wt[0].Theme||'');
-    const gid='g'+name.replace(/[^a-z0-9]/gi,'_')+wk.replace(/[^a-z0-9]/gi,'_');
-    const bs=dn===wt.length?'background:#D1F2EB;color:#0E6655':dn>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
-    const bt=dn===wt.length?'Complete':dn+'/'+wt.length+' done';
-    const rows=wt.map(t=>{
-      const done=t.Completed==='Completed';
-      const cat=(t.Category||'').toLowerCase();
-      return '<div class="task-row"><div class="task-dot '+(done?'done':'undone')+'"></div>'+
-        '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+esc(t.Task||'')+'</div>'+
-        '<div class="task-bottom">'+(cat?'<span class="cat-pill cat-'+cat+'">'+cat+'</span>':'')+
-        (t.Timestamp?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+fmt(t.Timestamp)+'</span>':'')+
+
+  // Show ALL 12 weeks with all tasks
+  return WEEKS_ALL.map(w=>{
+    const wk='Week '+w.num;
+    const taskRows=w.tasks.map(taskName=>{
+      const key=wk+'||'+taskName;
+      const status=taskStatus[key];
+      const done=status&&status.completed;
+      const ts=status&&status.timestamp?fmt(status.timestamp):'';
+      return '<div class="task-row">'+
+        '<div class="task-dot '+(done?'done':'undone')+'"></div>'+
+        '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+esc(taskName)+'</div>'+
+        '<div class="task-bottom">'+
+        (ts?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+ts+'</span>':'<span class="task-time" style="color:#ddd">Not started</span>')+
         '</div></div></div>';
     }).join('');
+
+    const done=w.tasks.filter(t=>taskStatus['Week '+w.num+'||'+t]&&taskStatus['Week '+w.num+'||'+t].completed).length;
+    const total=w.tasks.length;
+    const wp=Math.round(done/total*100);
+    const gid='g'+name.replace(/[^a-z0-9]/gi,'_')+'_w'+w.num;
+    const bs=done===total?'background:#D1F2EB;color:#0E6655':done>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
+    const bt=done===total?'Complete':done+'/'+total+' done';
+
     return '<div class="week-group">'+
-      '<div class="wg-minibar-wrap"><div class="wg-minibar" style="width:'+wp+'%;background:'+(dn===wt.length?'#0E6655':'#1A5276')+'"></div></div>'+
-      '<div class="wg-header" data-gid="'+gid+'"><div><div class="wg-title">'+esc(wk)+'</div>'+(theme?'<div class="wg-theme">'+theme+'</div>':'')+
+      '<div class="wg-minibar-wrap"><div class="wg-minibar" style="width:'+wp+'%;background:'+(done===total?'#0E6655':'#1A5276')+'"></div></div>'+
+      '<div class="wg-header" data-gid="'+gid+'"><div>'+
+      '<div class="wg-title">Week '+w.num+'</div>'+
+      '<div class="wg-theme">'+esc(w.theme)+'</div>'+
       '</div><div class="wg-right"><span class="wg-badge" style="'+bs+'">'+bt+'</span>'+
       '<span class="wg-chev" id="c-'+gid+'">&#8964;</span></div></div>'+
-      '<div class="wg-body" id="'+gid+'">'+rows+'</div></div>';
+      '<div class="wg-body" id="'+gid+'">'+taskRows+'</div></div>';
   }).join('');
 }
 
