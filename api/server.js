@@ -116,6 +116,11 @@ async function readSheet(token, sheet) {
       Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
       EntryIndex: row[3]||'', FeedbackText: row[4]||'', Grade: row[5]||'', Published: row[6]||''
     })).filter(r => r.Student && r.Student !== 'Student');
+  } else if (sheet === 'Feedback') {
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
+      EntryIndex: row[3]||'', FeedbackText: row[4]||'', Grade: row[5]||'', Published: row[6]||''
+    })).filter(r => r.Student && r.Student !== 'Student');
   }
   return [];
 }
@@ -157,6 +162,50 @@ app.get('/api/data', async (req, res) => {
     res.json({ tasks, journals, vocab });
   } catch (e) {
     console.error('GET /api/data error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Save teacher feedback ────────────────────────────────────────────────────
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.student || !d.week) return res.status(400).json({ error: 'Missing fields' });
+    const token = await getToken();
+    await ensureSheet(token, 'Feedback', ['Timestamp','Student','Week','EntryIndex','FeedbackText','Grade','Published']);
+    const ts = new Date().toLocaleString('en-GB');
+    await appendRow(token, 'Feedback', [ts, d.student, d.week, String(d.entryIndex||0), d.feedbackText||'', d.grade||'', d.published?'Yes':'No']);
+    res.json({ status: 'ok' });
+  } catch(e) {
+    console.error('POST /api/feedback error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Get feedback for a student ────────────────────────────────────────────────
+app.get('/api/feedback/:student', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const token = await getToken();
+    const all = await readSheet(token, 'Feedback').catch(() => []);
+    const student = decodeURIComponent(req.params.student);
+    const feedback = all.filter(r => r.Student === student && r.Published === 'Yes');
+    res.json({ feedback });
+  } catch(e) {
+    console.error('GET /api/feedback error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Get ALL feedback (for teacher dashboard) ──────────────────────────────────
+app.get('/api/feedback', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const token = await getToken();
+    const feedback = await readSheet(token, 'Feedback').catch(() => []);
+    res.json({ feedback });
+  } catch(e) {
+    console.error('GET /api/feedback error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -936,17 +985,12 @@ async function loadData(){
     D.tasks=j.tasks||[];
     D.journals=j.journals||[];
     D.vocab=j.vocab||[];
-    // Load feedback for all students
-    if(students.length > 0) {
-      D.feedback = [];
-      await Promise.all(students.map(async s => {
-        try {
-          const fr = await fetch('/api/feedback/'+encodeURIComponent(s)+'?t='+Date.now());
-          const fj = await fr.json();
-          D.feedback = [...(D.feedback||[]), ...(fj.feedback||[])];
-        } catch(e) {}
-      }));
-    }
+    // Load all feedback
+    try {
+      const fr = await fetch('/api/feedback?t='+Date.now());
+      const fj = await fr.json();
+      D.feedback = fj.feedback || [];
+    } catch(e) { D.feedback = []; }
     const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student).filter(Boolean);
     students=[...new Set(names)].sort();
     if(!cur&&students.length)cur=students[0];
