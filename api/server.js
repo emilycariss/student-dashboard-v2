@@ -204,6 +204,37 @@ app.get('/api/feedback', async (req, res) => {
   }
 });
 
+// ── AI feedback suggestion ───────────────────────────────────────────────────
+app.post('/api/ai-feedback', async (req, res) => {
+  try {
+    const { journalText, prompt, week } = req.body;
+    if (!journalText) return res.status(400).json({ error: 'No journal text' });
+
+    const aiPrompt = "You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional. Writing prompt: " + (prompt||"Respond to the weekly writing prompt.") + " Student response: " + journalText + " Please provide: 1) A brief overall comment (2-3 sentences) 2) One specific strength with an example from the text 3) One clear improvement suggestion 4) A grade: Excellent, Good, or Developing. Format exactly as: FEEDBACK: [your feedback written to the student as you] GRADE: [Excellent/Good/Developing]";
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: aiPrompt }]
+      })
+    });
+    const data = await aiRes.json();
+    if (data.error) throw new Error(data.error.message || 'AI error');
+    const reply = data.content?.[0]?.text || '';
+    res.json({ reply });
+  } catch(e) {
+    console.error('AI feedback error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Student page ──────────────────────────────────────────────────────────────
 app.get('/student/:slug', (req, res) => {
   const slug = req.params.slug;
@@ -938,17 +969,14 @@ async function generateFeedback(fbId, entryIndex, studentName, week) {
 
   try {
     const aiPrompt = "You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional. Writing prompt: " + prompt + " Student response: " + journalText + " Please provide: 1) A brief overall comment (2-3 sentences) 2) One specific strength with an example from the text 3) One clear improvement suggestion 4) A grade: Excellent, Good, or Developing. Format exactly as: FEEDBACK: [your feedback written to the student as you] GRADE: [Excellent/Good/Developing]";
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/ai-feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: aiPrompt }]
-      })
+      body: JSON.stringify({ journalText: journalText, prompt: prompt, week: week })
     });
     const data = await res.json();
-    const reply = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : "";
+    if(data.error) throw new Error(data.error);
+    const reply = data.reply || "";
     const feedbackMatch = reply.match(/FEEDBACK:\s*([\s\S]*?)(?=GRADE:|$)/i);
     const gradeMatch = reply.match(/GRADE:\s*(Excellent|Good|Developing)/i);
     if(feedbackMatch && feedbackMatch[1].trim()) {
