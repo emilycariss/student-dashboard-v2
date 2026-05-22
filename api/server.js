@@ -1065,14 +1065,14 @@ function buildTasks(name){
 
   // Helper: fuzzy match task names (ignore quotes, punctuation differences)
   function fuzzyMatch(logged, template) {
-    const clean = s => s.toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+    const clean = s => s.toLowerCase().replace(/[^a-z0-9]/g,'').trim();
     const l = clean(logged);
     const t = clean(template);
     if(l === t) return true;
-    // Check if key words match (first 4+ words)
-    const lWords = l.split(' ').slice(0,5).join(' ');
-    const tWords = t.split(' ').slice(0,5).join(' ');
-    return lWords === tWords || l.includes(t.slice(0,20)) || t.includes(l.slice(0,20));
+    if(l.length > 10 && t.length > 10) {
+      return l.slice(0,15) === t.slice(0,15);
+    }
+    return false;
   }
 
   // Show ALL 12 weeks with all tasks
