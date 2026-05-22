@@ -712,8 +712,12 @@ function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function fmt(ts){
-  try{return new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
-  catch(x){return '';}
+  if(!ts) return '';
+  try{
+    const d = new Date(ts);
+    if(isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  }catch(x){return '';}
 }
 
 async function loadData(){
