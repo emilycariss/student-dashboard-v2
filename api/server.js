@@ -711,10 +711,29 @@ let D={tasks:[],journals:[],vocab:[]},students=[],cur=null;
 function esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function parseTs(ts){
+  if(!ts) return null;
+  let d = new Date(ts);
+  if(isNaN(d.getTime()) && ts.includes('/')) {
+    const parts = ts.split(', ');
+    const dateParts = parts[0].split('/');
+    const timePart = parts[1] || '00:00:00';
+    d = new Date(dateParts[2]+'-'+dateParts[1]+'-'+dateParts[0]+'T'+timePart);
+  }
+  return isNaN(d.getTime()) ? null : d;
+}
 function fmt(ts){
   if(!ts) return '';
   try{
-    const d = new Date(ts);
+    let d = new Date(ts);
+    // Handle DD/MM/YYYY, HH:MM:SS format from Google Sheets
+    if(isNaN(d.getTime()) && ts.includes('/')) {
+      const parts = ts.split(', ');
+      const dateParts = parts[0].split('/');
+      const timePart = parts[1] || '00:00:00';
+      // Convert DD/MM/YYYY to YYYY-MM-DD
+      d = new Date(dateParts[2]+'-'+dateParts[1]+'-'+dateParts[0]+'T'+timePart);
+    }
     if(isNaN(d.getTime())) return '';
     return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
   }catch(x){return '';}
@@ -745,7 +764,7 @@ function render(){
   const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const today=new Date().toLocaleDateString();
   const act=new Set([...D.tasks,...D.journals].filter(r=>{
-    try{return new Date(r.Timestamp).toLocaleDateString()===today;}catch(x){return false;}
+    try{const d=parseTs(r.Timestamp);return d&&d.toLocaleDateString()===today;}catch(x){return false;}
   }).map(r=>r.Student)).size;
   document.getElementById('ss').textContent=students.length;
   document.getElementById('st').textContent=done.length;
@@ -916,7 +935,7 @@ function buildVocab(name){
 
 function lastActive(name){
   const all=[...D.tasks,...D.journals,...D.vocab].filter(r=>r.Student===name).map(r=>{
-    try{return new Date(r.Timestamp);}catch(x){return null;}
+    try{return parseTs(r.Timestamp);}catch(x){return null;}
   }).filter(d=>d&&!isNaN(d));
   return all.length?new Date(Math.max(...all)):null;
 }
