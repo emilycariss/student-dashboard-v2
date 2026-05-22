@@ -883,12 +883,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <div class="wrap">
   <div class="summary-grid">
-    <div class="sum-card"><span class="sum-val" id="ss">-</span><span class="sum-lbl">Students</span></div>
     <div class="sum-card"><span class="sum-val" id="st">-</span><span class="sum-lbl">Tasks completed</span></div>
     <div class="sum-card"><span class="sum-val" id="sj">-</span><span class="sum-lbl">Journal entries</span></div>
-    <div class="sum-card"><span class="sum-val" id="sw">-</span><span class="sum-lbl">Words written</span></div>
-    <div class="sum-card"><span class="sum-val" id="sv">-</span><span class="sum-lbl">Vocab cards</span></div>
     <div class="sum-card"><span class="sum-val" id="sa">-</span><span class="sum-lbl">Active today</span></div>
+    <div class="sum-card"><span class="sum-val" id="sl">-</span><span class="sum-lbl">Avg days since active</span></div>
+    <div class="sum-card"><span class="sum-val" id="so">-</span><span class="sum-lbl">On track this week</span></div>
+    <div class="sum-card"><span class="sum-val" id="sp">-</span><span class="sum-lbl">Avg completion</span></div>
   </div>
   <div id="mc"><div class="empty">Loading student data...</div></div>
 </div>
@@ -1020,12 +1020,40 @@ function render(){
   const act=new Set([...D.tasks,...D.journals].filter(r=>{
     try{const d=parseTs(r.Timestamp);return d&&d.toLocaleDateString()===today;}catch(x){return false;}
   }).map(r=>r.Student)).size;
-  document.getElementById('ss').textContent=students.length;
+  // Avg days since active
+  let totalDaysSince=0, activeCount=0;
+  students.forEach(s=>{
+    const la=lastActive(s);
+    if(la){ totalDaysSince+=(Date.now()-la)/86400000; activeCount++; }
+  });
+  const avgDays = activeCount>0 ? Math.round(totalDaysSince/activeCount) : '-';
+
+  // On track this week - student has completed at least 1 task in last 7 days
+  const weekAgo = Date.now() - 7*24*3600000;
+  const onTrack = students.filter(s=>{
+    const st=D.states&&D.states[s];
+    if(!st) return false;
+    const la=lastActive(s);
+    return la && la.getTime() > weekAgo;
+  }).length;
+
+  // Avg completion across all students
+  let totalPct=0;
+  students.forEach(s=>{
+    const st=D.states&&D.states[s];
+    if(st){
+      const done=Object.values(st).filter(t=>t.completed).length;
+      totalPct+=Math.round(done/72*100);
+    }
+  });
+  const avgPct = students.length>0 ? Math.round(totalPct/students.length)+'%' : '-';
+
   document.getElementById('st').textContent=done.length;
   document.getElementById('sj').textContent=D.journals.length;
-  document.getElementById('sw').textContent=words.toLocaleString();
-  document.getElementById('sv').textContent=D.vocab.length;
   document.getElementById('sa').textContent=act;
+  document.getElementById('sl').textContent=avgDays==='-'?'-':avgDays+'d';
+  document.getElementById('so').textContent=onTrack+'/'+students.length;
+  document.getElementById('sp').textContent=avgPct;
   const mc=document.getElementById('mc');
   if(!students.length){
     mc.innerHTML='<div class="no-data"><strong>No student data yet</strong>Students need to open their pages and complete a task.</div>';
