@@ -929,7 +929,14 @@ async function loadData(){
 }
 
 function render(){
-  const done=D.tasks.filter(t=>t.Completed==='Completed');
+  // Deduplicate tasks - keep most recent entry per student+week+task
+  const taskMap={};
+  [...D.tasks].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
+    const k=(t.Student||'')+'||'+(t.Week||'')+'||'+(t.Task||'');
+    taskMap[k]=t;
+  });
+  const dedupedTasks=Object.values(taskMap);
+  const done=dedupedTasks.filter(t=>t.Completed==='Completed');
   const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const today=new Date().toLocaleDateString();
   const act=new Set([...D.tasks,...D.journals].filter(r=>{
@@ -1022,7 +1029,14 @@ function openFirst(){
 
 function buildPanel(name){
   const tk=D.tasks.filter(t=>t.Student===name);
-  const cp=tk.filter(t=>t.Completed==='Completed');
+  // Deduplicate this student's tasks
+  const tkMap={};
+  [...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
+    const k=(t.Week||'')+'||'+(t.Task||'');
+    tkMap[k]=t;
+  });
+  const tkDedup=Object.values(tkMap);
+  const cp=tkDedup.filter(t=>t.Completed==='Completed');
   const jn=D.journals.filter(j=>j.Student===name);
   const vc=D.vocab.filter(v=>v.Student===name);
   const wd=jn.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
