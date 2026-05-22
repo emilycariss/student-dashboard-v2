@@ -110,12 +110,6 @@ async function readSheet(token, sheet) {
       Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
       Word: row[3]||'', Action: row[4]||''
     })).filter(r => r.Student && r.Student !== 'Student');
-  }
-  } else if (sheet === 'Feedback') {
-    return rows.map(row => ({
-      Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
-      EntryIndex: row[3]||'', FeedbackText: row[4]||'', Grade: row[5]||'', Published: row[6]||''
-    })).filter(r => r.Student && r.Student !== 'Student');
   } else if (sheet === 'Feedback') {
     return rows.map(row => ({
       Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
