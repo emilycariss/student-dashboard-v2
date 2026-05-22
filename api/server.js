@@ -110,6 +110,10 @@ async function readSheet(token, sheet) {
       Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
       Word: row[3]||'', Action: row[4]||''
     })).filter(r => r.Student && r.Student !== 'Student');
+  } else if (sheet === 'Student States') {
+    return rows.map(row => ({
+      Timestamp: row[0]||'', Student: row[1]||'', State: row[2]||''
+    })).filter(r => r.Student);
   } else if (sheet === 'Feedback') {
     return rows.map(row => ({
       Timestamp: row[0]||'', Student: row[1]||'', Week: row[2]||'',
@@ -139,6 +143,54 @@ app.post('/api/log', async (req, res) => {
     res.json({ status: 'ok', student: d.student, type: d.type });
   } catch (e) {
     console.error('POST /api/log error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Save full student state ──────────────────────────────────────────────────
+app.post('/api/state', async (req, res) => {
+  try {
+    const { student, state } = req.body;
+    if (!student || !state) return res.status(400).json({ error: 'Missing fields' });
+    const token = await getToken();
+    await ensureSheet(token, 'Student States', ['Timestamp','Student','State']);
+    // Read existing states and replace this student's entry
+    const SHEETS_BASE2 = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID;
+    const existing = await readSheet(token, 'Student States').catch(() => []);
+    const others = existing.filter(r => r.Student !== student);
+    const ts = new Date().toLocaleString('en-GB');
+    const allRows = [...others, { Student: student, State: JSON.stringify(state), Timestamp: ts }];
+    // Clear and rewrite
+    await fetch(SHEETS_BASE2 + '/values/Student%20States:clear', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
+    });
+    if (allRows.length) {
+      await fetch(SHEETS_BASE2 + '/values/Student%20States!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: allRows.map(r => [r.Timestamp, r.Student, r.State]) })
+      });
+    }
+    res.json({ status: 'ok' });
+  } catch(e) {
+    console.error('POST /api/state error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Get all student states ────────────────────────────────────────────────────
+app.get('/api/states', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const token = await getToken();
+    const rows = await readSheet(token, 'Student States').catch(() => []);
+    const states = {};
+    rows.forEach(r => {
+      try { states[r.Student] = JSON.parse(r.State); } catch(e) {}
+    });
+    res.json({ states });
+  } catch(e) {
     res.status(500).json({ error: e.message });
   }
 });
@@ -483,6 +535,26 @@ function toggleTask(wn,ti){
   updateStats();
   const w=WEEKS.find(x=>x.num===wn);
   sync({type:"task",week:wn,weekTheme:w.theme,taskTitle:w.tasks[ti].title,category:w.tasks[ti].cat,completed:state[k]});
+  // Push full state to server so teacher sees exact mirror
+  pushState();
+}
+
+function pushState(){
+  // Build a clean summary of all task states
+  const taskStates={};
+  WEEKS.forEach(w=>{
+    w.tasks.forEach((t,ti)=>{
+      taskStates["w"+w.num+"_t"+ti]={
+        week:w.num,weekTheme:w.theme,title:t.title,
+        cat:t.cat,completed:!!state["t_"+w.num+"_"+ti]
+      };
+    });
+  });
+  fetch(SERVER_URL.replace("/api/log","/api/state"),{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({student:STUDENT_NAME,state:taskStates})
+  }).catch(e=>console.log("State push failed:",e));
 }
 
 function resetTracker(){
@@ -917,6 +989,12 @@ async function loadData(){
       const fj = await fr.json();
       D.feedback = fj.feedback || [];
     } catch(e) { D.feedback = []; }
+    // Load student states (exact mirror of student pages)
+    try {
+      const sr = await fetch('/api/states?t='+Date.now());
+      const sj = await sr.json();
+      D.states = sj.states || {};
+    } catch(e) { D.states = {}; }
     const names=[...D.tasks,...D.journals,...D.vocab].map(x=>x.Student).filter(Boolean);
     students=[...new Set(names)].sort();
     if(!cur&&students.length)cur=students[0];
@@ -929,14 +1007,14 @@ async function loadData(){
 }
 
 function render(){
-  // Deduplicate tasks - keep most recent entry per student+week+task
-  const taskMap={};
-  [...D.tasks].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
-    const k=(t.Student||'')+'||'+(t.Week||'')+'||'+(t.Task||'');
-    taskMap[k]=t;
-  });
-  const dedupedTasks=Object.values(taskMap);
-  const done=dedupedTasks.filter(t=>t.Completed==='Completed');
+  // Count completed tasks from student states
+  let totalDone=0;
+  if(D.states){
+    Object.values(D.states).forEach(st=>{
+      Object.values(st).forEach(t=>{ if(t.completed) totalDone++; });
+    });
+  }
+  const done={length:totalDone};
   const words=D.journals.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
   const today=new Date().toLocaleDateString();
   const act=new Set([...D.tasks,...D.journals].filter(r=>{
@@ -1029,14 +1107,19 @@ function openFirst(){
 
 function buildPanel(name){
   const tk=D.tasks.filter(t=>t.Student===name);
-  // Deduplicate this student's tasks
-  const tkMap={};
-  [...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
-    const k=(t.Week||'')+'||'+(t.Task||'');
-    tkMap[k]=t;
-  });
-  const tkDedup=Object.values(tkMap);
-  const cp=tkDedup.filter(t=>t.Completed==='Completed');
+  // Count from state if available
+  const studentState=D.states&&D.states[name];
+  let cpCount=0;
+  if(studentState){
+    Object.values(studentState).forEach(t=>{ if(t.completed) cpCount++; });
+  } else {
+    const tkMap={};
+    [...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
+      const k=(t.Week||'')+'||'+(t.Task||'');tkMap[k]=t;
+    });
+    cpCount=Object.values(tkMap).filter(t=>t.Completed==='Completed').length;
+  }
+  const cp={length:cpCount};
   const jn=D.journals.filter(j=>j.Student===name);
   const vc=D.vocab.filter(v=>v.Student===name);
   const wd=jn.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
@@ -1067,61 +1150,54 @@ function buildPanel(name){
 }
 
 function buildTasks(name){
-  const tk=D.tasks.filter(t=>t.Student===name);
-  
-  // Build a lookup of most recent status per task
-  const taskStatus={};
-  const sorted=[...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp)));
-  sorted.forEach(t=>{
-    const key=(t.Week||'')+'||'+(t.Task||'');
-    taskStatus[key]={completed:t.Completed==='Completed',timestamp:t.Timestamp,task:t.Task||''};
-  });
+  // Use exact state from student's page if available
+  const studentState = D.states && D.states[name];
 
-  // Helper: fuzzy match task names (ignore quotes, punctuation differences)
-  function fuzzyMatch(logged, template) {
-    const clean = s => s.toLowerCase().replace(/[^a-z0-9]/g,'').trim();
-    const l = clean(logged);
-    const t = clean(template);
-    if(l === t) return true;
-    if(l.length > 10 && t.length > 10) {
-      return l.slice(0,15) === t.slice(0,15);
-    }
-    return false;
-  }
-
-  // Show ALL 12 weeks with all tasks
   return WEEKS_ALL.map(w=>{
-    const wk='Week '+w.num;
-    const taskRows=w.tasks.map(taskName=>{
-      // Try exact match first, then fuzzy match
-      const exactKey=wk+'||'+taskName;
-      let status=taskStatus[exactKey];
-      if(!status) {
-        // Try fuzzy match against all logged tasks for this week
-        const weekKey = Object.keys(taskStatus).find(k => 
-          k.startsWith(wk+'||') && fuzzyMatch(k.slice(wk.length+2), taskName)
-        );
-        if(weekKey) status=taskStatus[weekKey];
+    const taskRows=w.tasks.map((taskName,ti)=>{
+      let done=false, ts='';
+      if(studentState) {
+        const key='w'+w.num+'_t'+ti;
+        const entry=studentState[key];
+        if(entry){ done=entry.completed; }
+      } else {
+        // Fall back to task log matching
+        const tk=D.tasks.filter(t=>t.Student===name);
+        const taskMap={};
+        [...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp))).forEach(t=>{
+          taskMap[(t.Week||'')+'||'+(t.Task||'')]=t;
+        });
+        const wk='Week '+w.num;
+        const exactKey=wk+'||'+taskName;
+        let status=taskMap[exactKey];
+        if(!status){
+          const weekKey=Object.keys(taskMap).find(k=>k.startsWith(wk+'||')&&k.replace(/[^a-z0-9]/gi,'').slice(wk.replace(/[^a-z0-9]/gi,'').length,wk.replace(/[^a-z0-9]/gi,'').length+15)===taskName.replace(/[^a-z0-9]/gi,'').slice(0,15));
+          if(weekKey)status=taskMap[weekKey];
+        }
+        if(status){done=status.Completed==='Completed';ts=status.Timestamp;}
       }
-      const done=status&&status.completed;
-      const ts=status&&status.timestamp?fmt(status.timestamp):'';
       return '<div class="task-row">'+
         '<div class="task-dot '+(done?'done':'undone')+'"></div>'+
         '<div class="task-info"><div class="task-name'+(done?' done':'')+'">'+esc(taskName)+'</div>'+
         '<div class="task-bottom">'+
-        (ts?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+ts+'</span>':'<span class="task-time" style="color:#ddd">Not started</span>')+
+        (ts?'<span class="task-time">'+(done?'Completed':'Last seen')+': '+fmt(ts)+'</span>':
+            done?'<span class="task-time" style="color:#0E6655">Completed</span>':
+            '<span class="task-time" style="color:#ddd">Not started</span>')+
         '</div></div></div>';
     }).join('');
 
-    const done=w.tasks.filter(t=>taskStatus['Week '+w.num+'||'+t]&&taskStatus['Week '+w.num+'||'+t].completed).length;
+    const doneCount=w.tasks.filter((_,ti)=>{
+      if(studentState){const e=studentState['w'+w.num+'_t'+ti];return e&&e.completed;}
+      return false;
+    }).length;
     const total=w.tasks.length;
-    const wp=Math.round(done/total*100);
+    const wp=Math.round(doneCount/total*100);
     const gid='g'+name.replace(/[^a-z0-9]/gi,'_')+'_w'+w.num;
-    const bs=done===total?'background:#D1F2EB;color:#0E6655':done>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
-    const bt=done===total?'Complete':done+'/'+total+' done';
+    const bs=doneCount===total?'background:#D1F2EB;color:#0E6655':doneCount>0?'background:#FCF3CF;color:#7D6608':'background:#f0f0f0;color:#aaa';
+    const bt=doneCount===total?'Complete':doneCount+'/'+total+' done';
 
     return '<div class="week-group">'+
-      '<div class="wg-minibar-wrap"><div class="wg-minibar" style="width:'+wp+'%;background:'+(done===total?'#0E6655':'#1A5276')+'"></div></div>'+
+      '<div class="wg-minibar-wrap"><div class="wg-minibar" style="width:'+wp+'%;background:'+(doneCount===total?'#0E6655':'#1A5276')+'"></div></div>'+
       '<div class="wg-header" data-gid="'+gid+'"><div>'+
       '<div class="wg-title">Week '+w.num+'</div>'+
       '<div class="wg-theme">'+esc(w.theme)+'</div>'+
