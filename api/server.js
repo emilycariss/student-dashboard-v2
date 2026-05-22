@@ -850,6 +850,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .no-data{background:#FFF9F0;border:1.5px solid #FDEBD0;border-radius:12px;padding:1.25rem;text-align:center;color:#BA4A00;font-size:13px;margin-bottom:1rem}
 .no-data strong{display:block;font-size:15px;margin-bottom:4px;color:#7D6608}
 .dot-active{background:#0E6655}.dot-recent{background:#F39C12}.dot-inactive{background:#E74C3C}.dot-none{background:#ccc}
+.student-stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+.sstat-card{background:#f8f9fa;border-radius:8px;padding:0.6rem 0.75rem;text-align:center}
+.sstat-val{display:block;font-size:16px;font-weight:700;color:#1A5276;margin-bottom:2px}
+.sstat-lbl{display:block;font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:0.04em}
 .fb-section{margin-top:1rem;padding-top:1rem;border-top:1px solid #f0f0f0}
 .fb-header{margin-bottom:0.5rem}
 .fb-status{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
@@ -1133,6 +1137,35 @@ function openFirst(){
   if(b)b.classList.add('open');if(c)c.classList.add('open');
 }
 
+function buildStudentStats(name){
+  const la=lastActive(name);
+  const daysSince=la?Math.floor((Date.now()-la.getTime())/86400000):null;
+  const st=D.states&&D.states[name];
+  const completedCount=st?Object.values(st).filter(t=>t.completed).length:0;
+  const pct=Math.round(completedCount/T*100);
+  const jn=D.journals.filter(j=>j.Student===name);
+  const words=jn.reduce((s,j)=>s+(parseInt(j.WordCount)||0),0);
+  const weekAgo=Date.now()-7*24*3600000;
+  const activeThisWeek=la&&la.getTime()>weekAgo;
+
+  // Work out which week they should be on based on today's date
+  const startDate=new Date('2026-05-28');
+  const weeksPassed=Math.min(12,Math.max(1,Math.floor((Date.now()-startDate.getTime())/(7*24*3600000))+1));
+  const expectedTasks=weeksPassed*6;
+  const onTrackPct=Math.round(completedCount/expectedTasks*100);
+  const onTrackLabel=completedCount>=expectedTasks?'On track':completedCount>=expectedTasks*0.75?'Nearly on track':'Behind';
+  const onTrackColor=completedCount>=expectedTasks?'#0E6655':completedCount>=expectedTasks*0.75?'#7D6608':'#C0392B';
+
+  return '<div class="student-stats-grid">'+
+    '<div class="sstat-card"><span class="sstat-val">'+completedCount+'/'+T+'</span><span class="sstat-lbl">Tasks done</span></div>'+
+    '<div class="sstat-card"><span class="sstat-val">'+pct+'%</span><span class="sstat-lbl">Completion</span></div>'+
+    '<div class="sstat-card"><span class="sstat-val" style="color:'+onTrackColor+'">'+onTrackLabel+'</span><span class="sstat-lbl">vs expected pace</span></div>'+
+    '<div class="sstat-card"><span class="sstat-val">'+(daysSince===null?'Never':daysSince===0?'Today':daysSince+'d ago')+'</span><span class="sstat-lbl">Last active</span></div>'+
+    '<div class="sstat-card"><span class="sstat-val">'+jn.length+'</span><span class="sstat-lbl">Journal entries</span></div>'+
+    '<div class="sstat-card"><span class="sstat-val">'+words.toLocaleString()+'</span><span class="sstat-lbl">Words written</span></div>'+
+  '</div>';
+}
+
 function buildPanel(name){
   const tk=D.tasks.filter(t=>t.Student===name);
   // Count from state if available
@@ -1166,6 +1199,7 @@ function buildPanel(name){
     '</div></div>'+
     '<div class="prog-section"><div class="prog-label"><span>Overall progress</span><span>'+pct+'% ('+cp.length+' of '+T+' tasks)</span></div>'+
     '<div class="prog-wrap"><div class="prog-fill" style="width:'+pct+'%"></div></div></div>'+
+    buildStudentStats(name)+
     '<div class="subtab-row">'+
     '<button class="subtab active" data-tab="t">Tasks</button>'+
     '<button class="subtab" data-tab="j">Journal ('+jn.length+')</button>'+
