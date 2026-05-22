@@ -204,46 +204,6 @@ app.get('/api/feedback', async (req, res) => {
   }
 });
 
-// ── AI feedback suggestion ───────────────────────────────────────────────────
-app.post('/api/ai-feedback', async (req, res) => {
-  try {
-    const { journalText, prompt, week } = req.body;
-    if (!journalText) return res.status(400).json({ error: 'No journal text' });
-
-    const aiPrompt = "You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional. Writing prompt: " + (prompt||"Respond to the weekly writing prompt.") + " Student response: " + journalText + " Please provide: 1) A brief overall comment (2-3 sentences) 2) One specific strength with an example from the text 3) One clear improvement suggestion 4) A grade: Excellent, Good, or Developing. Format exactly as: FEEDBACK: [your feedback written to the student as you] GRADE: [Excellent/Good/Developing]";
-
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY || process.env.anthropic_api_key || '',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: aiPrompt }]
-      })
-    });
-    const data = await aiRes.json();
-    if (data.error) throw new Error(data.error.message || 'AI error');
-    const reply = data.content?.[0]?.text || '';
-    res.json({ reply });
-  } catch(e) {
-    console.error('AI feedback error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── Debug env vars ───────────────────────────────────────────────────────────
-app.get('/api/debug-env', (req, res) => {
-  res.json({ 
-    hasKey: !!(process.env.ANTHROPIC_API_KEY),
-    keyLength: (process.env.ANTHROPIC_API_KEY || '').length,
-    keyStart: (process.env.ANTHROPIC_API_KEY || '').slice(0,8)
-  });
-});
-
 // ── Student page ──────────────────────────────────────────────────────────────
 app.get('/student/:slug', (req, res) => {
   const slug = req.params.slug;
@@ -259,13 +219,7 @@ app.get('*', (req, res) => {
 });
 
 // ── Debug env vars ───────────────────────────────────────────────────────────
-app.get('/api/debug-env', (req, res) => {
-  res.json({ 
-    hasKey: !!(process.env.ANTHROPIC_API_KEY),
-    keyLength: (process.env.ANTHROPIC_API_KEY || '').length,
-    keyStart: (process.env.ANTHROPIC_API_KEY || '').slice(0,8)
-  });
-});
+
 
 // ── Student page HTML ─────────────────────────────────────────────────────────
 function studentPage(studentName) {
@@ -836,9 +790,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .fb-label{font-size:12px;color:#777;font-weight:500}
 .fb-grade{padding:4px 8px;font-size:12px;border:1.5px solid #ddd;border-radius:6px;background:#fff;color:#444;outline:none}
 .fb-grade:focus{border-color:#1A5276}
-.fb-ai-btn{padding:4px 10px;font-size:12px;font-weight:500;border:1.5px solid #6C3483;border-radius:6px;background:#F4ECF7;color:#6C3483;cursor:pointer;white-space:nowrap}
-.fb-ai-btn:hover{background:#E8DAEF}
-.fb-ai-btn:disabled{opacity:0.5;cursor:wait}
+
 .fb-textarea{width:100%;min-height:100px;border:1.5px solid #e0e6ed;border-radius:8px;padding:0.65rem;font-size:13px;font-family:inherit;color:#333;line-height:1.6;resize:vertical;outline:none}
 .fb-textarea:focus{border-color:#1A5276}
 .fb-btn-row{display:flex;align-items:center;justify-content:space-between}
@@ -952,64 +904,6 @@ async function publishFeedback(fbId, studentName, week, entryIndex) {
   }
 }
 
-async function generateFeedback(fbId, entryIndex, studentName, week) {
-  const textarea = document.getElementById("text_"+fbId);
-  const gradeEl = document.getElementById("grade_"+fbId);
-  if(!textarea) return;
-
-  var journalEls = document.querySelectorAll(".je-text");
-  var journalEl = null;
-  for(var k=0;k<journalEls.length;k++){
-    if(journalEls[k].id.endsWith("_"+entryIndex)) { journalEl = journalEls[k]; break; }
-  }
-  const journalText = journalEl ? journalEl.textContent.trim() : "";
-  if(!journalText){ alert("No journal text found."); return; }
-
-  const weekNum = parseInt((week||"").replace(/[^0-9]/g,""));
-  const prompts = {
-    1:"Write 5 sentences about what you want to achieve this summer.",
-    2:"Write 3 words you found difficult and break them into parts.",
-    3:"How did reading aloud feel this week?",
-    4:"Write a paragraph using at least 5 new vocabulary words.",
-    5:"Describe your skimming and scanning practice.",
-    6:"Write about a time you had to make a difficult decision.",
-    7:"Write a 5-6 sentence summary of The Distracted Teenage Brain.",
-    8:"Write 3 paragraphs arguing whether students should have homework during summer.",
-    9:"Write an analytical paragraph explaining how an author uses a literary device.",
-    10:"Write a full-page response to The Landlady by Roald Dahl.",
-    11:"Write a 5-paragraph essay: What does it take to achieve a dream?",
-    12:"Write a letter to yourself about what you learned this summer."
-  };
-  const prompt = prompts[weekNum] || "Respond to the weekly writing prompt.";
-
-  const allBtns = document.querySelectorAll(".fb-ai-btn");
-  allBtns.forEach(function(b){ if(b.getAttribute("data-fbid")===fbId){ b.disabled=true; b.textContent="Generating..."; }});
-
-  try {
-    const aiPrompt = "You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional. Writing prompt: " + prompt + " Student response: " + journalText + " Please provide: 1) A brief overall comment (2-3 sentences) 2) One specific strength with an example from the text 3) One clear improvement suggestion 4) A grade: Excellent, Good, or Developing. Format exactly as: FEEDBACK: [your feedback written to the student as you] GRADE: [Excellent/Good/Developing]";
-    const res = await fetch("/api/ai-feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ journalText: journalText, prompt: prompt, week: week })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-    const reply = data.reply || "";
-    const feedbackMatch = reply.match(/FEEDBACK:\s*([\s\S]*?)(?=GRADE:|$)/i);
-    const gradeMatch = reply.match(/GRADE:\s*(Excellent|Good|Developing)/i);
-    if(feedbackMatch && feedbackMatch[1].trim()) {
-      textarea.value = feedbackMatch[1].trim();
-      saveFbDraft(fbId);
-    }
-    if(gradeMatch && gradeEl) { gradeEl.value = gradeMatch[1]; }
-  } catch(e) {
-    alert("AI suggestion failed: " + e.message);
-  } finally {
-    allBtns.forEach(function(b){ if(b.getAttribute("data-fbid")===fbId){ b.disabled=false; b.textContent="✨ AI suggestion"; }});
-  }
-}
-
-
 async function loadData(){
   document.getElementById('lu').textContent='Loading...';
   try{
@@ -1106,17 +1000,7 @@ function render(){
   document.querySelectorAll('.fb-grade').forEach(function(sel){
     sel.addEventListener('change',function(){saveFbDraft(this.getAttribute('data-fbid'));});
   });
-  // AI suggestion button handlers
-  document.querySelectorAll('.fb-ai-btn').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var fbId=this.getAttribute('data-fbid');
-      var idx=parseInt(this.getAttribute('data-idx'));
-      var panel=this.closest('.student-panel');
-      var sName=panel?panel.getAttribute('data-name'):'';
-      var week=this.getAttribute('data-week');
-      generateFeedback(fbId,idx,sName,week);
-    });
-  });
+
   // Publish button handlers
   document.querySelectorAll('.fb-publish-btn').forEach(function(btn){
     btn.addEventListener('click',function(){
@@ -1254,7 +1138,7 @@ function buildJournal(name){
             '<option value="Good"'+(fbGrade==='Good'?' selected':'')+'>Good</option>'+
             '<option value="Developing"'+(fbGrade==='Developing'?' selected':'')+'>Developing</option>'+
           '</select>'+
-          '<button class="fb-ai-btn" data-fbid="'+fbId+'" data-idx="'+i+'" data-week="'+esc(entry.Week||'')+'">✨ AI suggestion</button>'+
+
         '</div>'+
         '<textarea class="fb-textarea" id="text_'+fbId+'" data-fbid="'+fbId+'" placeholder="Write your feedback here...">'+esc(fbText)+'</textarea>'+
         '<div class="fb-btn-row">'+
