@@ -844,12 +844,14 @@ function buildTasks(name){
   const tk=D.tasks.filter(t=>t.Student===name);
   if(!tk.length)return '<div class="empty">No task activity yet.</div>';
   const by={};
-  tk.forEach(t=>{
+  // Sort by timestamp first so we always keep the most recent entry per task
+  const sorted = [...tk].sort((a,b)=>new Date(a.Timestamp)-new Date(b.Timestamp));
+  sorted.forEach(t=>{
     const wk=t.Week||'Week ?';
     if(!by[wk])by[wk]=[];
     const ex=by[wk].find(x=>x.Task===t.Task);
     if(!ex)by[wk].push(t);
-    else if(new Date(t.Timestamp)>new Date(ex.Timestamp))Object.assign(ex,t);
+    else Object.assign(ex,t); // Always overwrite with more recent entry
   });
   return Object.keys(by).sort((a,b)=>(parseInt(a.replace(/[^0-9]/g,''))||0)-(parseInt(b.replace(/[^0-9]/g,''))||0)).map(wk=>{
     const wt=by[wk];
