@@ -1059,6 +1059,36 @@ function render(){
       if(d){d.classList.toggle('expanded');this.textContent=d.classList.contains('expanded')?'Show less':'Show full entry';}
     });
   });
+  // Feedback textarea handlers
+  document.querySelectorAll('.fb-textarea').forEach(function(ta){
+    ta.addEventListener('input',function(){saveFbDraft(this.getAttribute('data-fbid'));});
+  });
+  document.querySelectorAll('.fb-grade').forEach(function(sel){
+    sel.addEventListener('change',function(){saveFbDraft(this.getAttribute('data-fbid'));});
+  });
+  // AI suggestion button handlers
+  document.querySelectorAll('.fb-ai-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var fbId=this.getAttribute('data-fbid');
+      var idx=parseInt(this.getAttribute('data-idx'));
+      var panel=this.closest('.student-panel');
+      var sName=panel?panel.getAttribute('data-name'):'';
+      var week=this.getAttribute('data-week');
+      generateFeedback(fbId,idx,sName,week);
+    });
+  });
+  // Publish button handlers
+  document.querySelectorAll('.fb-publish-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var fbId=this.getAttribute('data-fbid');
+      var panel=this.closest('.student-panel');
+      var sName=panel?panel.getAttribute('data-name'):'';
+      var entry=this.closest('.journal-entry');
+      var week=entry?entry.getAttribute('data-week'):'';
+      var idx=entry?parseInt(entry.getAttribute('data-idx')):0;
+      publishFeedback(fbId,sName,week,idx);
+    });
+  });
   openFirst();
 }
 
@@ -1148,9 +1178,7 @@ function buildTasks(name){
 function buildJournal(name){
   const jn=D.journals.filter(j=>j.Student===name).sort((a,b)=>new Date(parseTs(b.Timestamp))-new Date(parseTs(a.Timestamp)));
   if(!jn.length)return '<div class="empty">No journal entries yet.</div>';
-
-  // Get feedback for this student
-  const studentFeedback = D.feedback ? D.feedback.filter(f=>f.Student===name) : [];
+  const studentFeedback=D.feedback?D.feedback.filter(f=>f.Student===name):[];
 
   return jn.map((entry,i)=>{
     const id='je_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
@@ -1159,15 +1187,13 @@ function buildJournal(name){
     const text=esc(entry.Text||'');
     const wc=parseInt(entry.WordCount||0);
     const ts=fmt(entry.Timestamp);
+    const fb=studentFeedback.find(f=>f.Week===entry.Week&&f.EntryIndex===String(i));
+    const fbText=fb?fb.FeedbackText:'';
+    const fbGrade=fb?fb.Grade:'';
+    const fbPublished=fb?fb.Published==='Yes':false;
+    const fbId='fb_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
 
-    // Check existing feedback
-    const fb = studentFeedback.find(f=>f.Week===entry.Week&&f.EntryIndex===String(i));
-    const fbText = fb ? fb.FeedbackText : '';
-    const fbGrade = fb ? fb.Grade : '';
-    const fbPublished = fb ? fb.Published === 'Yes' : false;
-    const fbId = 'fb_'+name.replace(/[^a-z0-9]/gi,'_')+'_'+i;
-
-    return '<div class="journal-entry">'+
+    return '<div class="journal-entry" data-student="'+esc(name)+'" data-week="'+esc(entry.Week||'')+'" data-idx="'+i+'">'+
       '<div class="je-meta"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
       '<span class="je-week">'+week+'</span>'+(theme?'<span class="je-theme">'+theme+'</span>':'')+
       '</div><div style="display:flex;align-items:center;gap:8px">'+
@@ -1175,28 +1201,26 @@ function buildJournal(name){
       '<span class="je-date">'+ts+'</span></div></div>'+
       '<div class="je-text" id="'+id+'">'+text+'</div>'+
       '<span class="je-expand" data-id="'+id+'">Show full entry</span>'+
-
-      // Feedback section
       '<div class="fb-section">'+
       '<div class="fb-header">'+
-        (fbPublished ? '<span class="fb-status published">Feedback published</span>' : '<span class="fb-status draft">Draft feedback</span>')+
+        (fbPublished?'<span class="fb-status published">Feedback published</span>':'<span class="fb-status draft">Draft feedback</span>')+
       '</div>'+
       '<div class="fb-controls">'+
         '<div class="fb-grade-row">'+
           '<label class="fb-label">Grade:</label>'+
-          '<select class="fb-grade" id="grade_'+fbId+'" onchange="saveFbDraft(''+fbId+'')">'+
+          '<select class="fb-grade" id="grade_'+fbId+'" data-fbid="'+fbId+'">'+
             '<option value="">-- Select --</option>'+
             '<option value="Excellent"'+(fbGrade==='Excellent'?' selected':'')+'>Excellent</option>'+
             '<option value="Good"'+(fbGrade==='Good'?' selected':'')+'>Good</option>'+
             '<option value="Developing"'+(fbGrade==='Developing'?' selected':'')+'>Developing</option>'+
           '</select>'+
-          '<button class="fb-ai-btn" onclick="generateFeedback(''+fbId+'','+i+',''+name.replace(/'/g,'\x27')+'',''+week.replace(/'/g,'\x27')+'')" title="Generate AI feedback suggestion">✨ AI suggestion</button>'+
+          '<button class="fb-ai-btn" data-fbid="'+fbId+'" data-idx="'+i+'" data-week="'+esc(entry.Week||'')+'">✨ AI suggestion</button>'+
         '</div>'+
-        '<textarea class="fb-textarea" id="text_'+fbId+'" placeholder="Write your feedback here..." oninput="saveFbDraft(''+fbId+'')">'+(fbText)+'</textarea>'+
+        '<textarea class="fb-textarea" id="text_'+fbId+'" data-fbid="'+fbId+'" placeholder="Write your feedback here...">'+esc(fbText)+'</textarea>'+
         '<div class="fb-btn-row">'+
           '<span class="fb-saved-msg" id="saved_'+fbId+'"></span>'+
-          '<button class="fb-publish-btn'+(fbPublished?' published':'')+'" onclick="publishFeedback(''+fbId+'',''+name.replace(/'/g,'\x27')+'',''+week.replace(/'/g,'\x27')+'','+i+')">'+
-            (fbPublished ? '✓ Published' : 'Publish feedback')+
+          '<button class="fb-publish-btn'+(fbPublished?' published':'')+'" data-fbid="'+fbId+'" data-published="'+fbPublished+'">'+
+            (fbPublished?'✓ Published':'Publish feedback')+
           '</button>'+
         '</div>'+
       '</div>'+
