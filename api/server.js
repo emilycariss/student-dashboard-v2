@@ -573,20 +573,18 @@ function renderJHist(num){
   const entries=state["je_"+num]||[];
   const c=document.getElementById("j-history");
   if(!entries.length){c.innerHTML="";return;}
-  c.innerHTML='<div class="j-hist-lbl">Previous entries</div>'+entries.map((e,i)=>{
+  // Only show teacher feedback, not the entry history itself
+  const withFeedback = entries.filter(e => e.feedback);
+  if(!withFeedback.length){c.innerHTML="";return;}
+  c.innerHTML='<div class="j-hist-lbl">Teacher feedback</div>'+withFeedback.map((e,i)=>{
     const gradeClass = e.grade ? 'grade-'+e.grade.toLowerCase() : '';
-    const feedbackHtml = e.feedback ?
-      '<div class="fb-received">'+
-        '<div class="fb-received-header">'+
-          '<span class="fb-received-label">Teacher feedback</span>'+
-          (e.grade ? '<span class="fb-received-grade '+gradeClass+'">'+e.grade+'</span>' : '')+
-        '</div>'+
-        '<div class="fb-received-text">'+e.feedback+'</div>'+
-      '</div>' : '';
-    return '<div class="j-entry"><div class="j-entry-date">'+e.date+'</div>'+
-      '<div class="j-entry-text" id="jhe-'+num+'-'+i+'">'+e.text+'</div>'+
-      '<span class="j-exp" data-id="jhe-'+num+'-'+i+'">Show more</span>'+
-      feedbackHtml+'</div>';
+    return '<div class="fb-received">'+
+      '<div class="fb-received-header">'+
+        '<span class="fb-received-label">Teacher feedback</span>'+
+        (e.grade ? '<span class="fb-received-grade '+gradeClass+'">'+e.grade+'</span>' : '')+
+      '</div>'+
+      '<div class="fb-received-text">'+e.feedback+'</div>'+
+    '</div>';
   }).join("");
 }
 function togJE(id,el){
