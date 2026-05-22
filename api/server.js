@@ -908,7 +908,11 @@ async function generateFeedback(fbId, entryIndex, studentName, week) {
   const gradeEl = document.getElementById("grade_"+fbId);
   if(!textarea) return;
 
-  const journalEl = document.querySelector(".je-text[id*=\"_"+entryIndex+"\""]");
+  var journalEls = document.querySelectorAll(".je-text");
+  var journalEl = null;
+  for(var k=0;k<journalEls.length;k++){
+    if(journalEls[k].id.endsWith("_"+entryIndex)) { journalEl = journalEls[k]; break; }
+  }
   const journalText = journalEl ? journalEl.textContent.trim() : "";
   if(!journalText){ alert("No journal text found."); return; }
 
