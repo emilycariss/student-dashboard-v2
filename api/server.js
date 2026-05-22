@@ -1060,15 +1060,35 @@ function buildTasks(name){
   const sorted=[...tk].sort((a,b)=>new Date(parseTs(a.Timestamp))-new Date(parseTs(b.Timestamp)));
   sorted.forEach(t=>{
     const key=(t.Week||'')+'||'+(t.Task||'');
-    taskStatus[key]={completed:t.Completed==='Completed',timestamp:t.Timestamp};
+    taskStatus[key]={completed:t.Completed==='Completed',timestamp:t.Timestamp,task:t.Task||''};
   });
+
+  // Helper: fuzzy match task names (ignore quotes, punctuation differences)
+  function fuzzyMatch(logged, template) {
+    const clean = s => s.toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+    const l = clean(logged);
+    const t = clean(template);
+    if(l === t) return true;
+    // Check if key words match (first 4+ words)
+    const lWords = l.split(' ').slice(0,5).join(' ');
+    const tWords = t.split(' ').slice(0,5).join(' ');
+    return lWords === tWords || l.includes(t.slice(0,20)) || t.includes(l.slice(0,20));
+  }
 
   // Show ALL 12 weeks with all tasks
   return WEEKS_ALL.map(w=>{
     const wk='Week '+w.num;
     const taskRows=w.tasks.map(taskName=>{
-      const key=wk+'||'+taskName;
-      const status=taskStatus[key];
+      // Try exact match first, then fuzzy match
+      const exactKey=wk+'||'+taskName;
+      let status=taskStatus[exactKey];
+      if(!status) {
+        // Try fuzzy match against all logged tasks for this week
+        const weekKey = Object.keys(taskStatus).find(k => 
+          k.startsWith(wk+'||') && fuzzyMatch(k.slice(wk.length+2), taskName)
+        );
+        if(weekKey) status=taskStatus[weekKey];
+      }
       const done=status&&status.completed;
       const ts=status&&status.timestamp?fmt(status.timestamp):'';
       return '<div class="task-row">'+
