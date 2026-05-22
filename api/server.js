@@ -904,71 +904,61 @@ async function publishFeedback(fbId, studentName, week, entryIndex) {
 }
 
 async function generateFeedback(fbId, entryIndex, studentName, week) {
-  const btn = document.querySelector('#btn_'+fbId) || document.querySelector('[onclick*="generateFeedback"][onclick*="'+fbId+'"]');
-  const textarea = document.getElementById('text_'+fbId);
-  const gradeEl = document.getElementById('grade_'+fbId);
+  const textarea = document.getElementById("text_"+fbId);
+  const gradeEl = document.getElementById("grade_"+fbId);
   if(!textarea) return;
 
-  // Get the journal text
-  const journalEl = document.querySelector('.je-text[id*="'+studentName.replace(/[^a-z0-9]/gi,'_')+'_'+entryIndex+'"]');
-  const journalText = journalEl ? journalEl.textContent : '';
-  if(!journalText.trim()){ alert('No journal text found.'); return; }
+  const journalEl = document.querySelector(".je-text[id*=\"_"+entryIndex+"\""]");
+  const journalText = journalEl ? journalEl.textContent.trim() : "";
+  if(!journalText){ alert("No journal text found."); return; }
 
-  // Find writing prompt for this week
-  const weekNum = parseInt((week||'').replace(/\D/g,''));
+  const weekNum = parseInt((week||"").replace(/[^0-9]/g,""));
   const prompts = {
-    1:'Write 5 sentences about what you want to achieve this summer. What is your biggest goal for the future?',
-    2:'Write 3 words you found difficult this week. Break each one into parts.',
-    3:'How did reading aloud feel this week? Write about one passage you read.',
-    4:'Write a paragraph using at least 5 new vocabulary words.',
-    5:'Describe your skimming and scanning practice this week.',
-    6:'Write about a time you had to make a difficult decision.',
-    7:'Write a 5-6 sentence summary of The Distracted Teenage Brain.',
-    8:'Write 3 paragraphs arguing whether students should have homework during summer.',
-    9:'Write an analytical paragraph explaining how an author uses a literary device.',
-    10:'Write a full-page response to The Landlady by Roald Dahl.',
-    11:'Write a 5-paragraph essay: What does it take to achieve a dream?',
-    12:'Write a letter to yourself about what you learned this summer.'
+    1:"Write 5 sentences about what you want to achieve this summer.",
+    2:"Write 3 words you found difficult and break them into parts.",
+    3:"How did reading aloud feel this week?",
+    4:"Write a paragraph using at least 5 new vocabulary words.",
+    5:"Describe your skimming and scanning practice.",
+    6:"Write about a time you had to make a difficult decision.",
+    7:"Write a 5-6 sentence summary of The Distracted Teenage Brain.",
+    8:"Write 3 paragraphs arguing whether students should have homework during summer.",
+    9:"Write an analytical paragraph explaining how an author uses a literary device.",
+    10:"Write a full-page response to The Landlady by Roald Dahl.",
+    11:"Write a 5-paragraph essay: What does it take to achieve a dream?",
+    12:"Write a letter to yourself about what you learned this summer."
   };
-  const prompt = prompts[weekNum] || 'Respond to the weekly writing prompt.';
+  const prompt = prompts[weekNum] || "Respond to the weekly writing prompt.";
 
-  // Disable button
-  const allBtns = document.querySelectorAll('.fb-ai-btn');
-  allBtns.forEach(b=>{ if(b.onclick && b.onclick.toString().includes(fbId)){ b.disabled=true; b.textContent='Generating...'; } });
+  const allBtns = document.querySelectorAll(".fb-ai-btn");
+  allBtns.forEach(function(b){ if(b.getAttribute("data-fbid")===fbId){ b.disabled=true; b.textContent="Generating..."; }});
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const aiPrompt = "You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional. Writing prompt: " + prompt + " Student response: " + journalText + " Please provide: 1) A brief overall comment (2-3 sentences) 2) One specific strength with an example from the text 3) One clear improvement suggestion 4) A grade: Excellent, Good, or Developing. Format exactly as: FEEDBACK: [your feedback written to the student as you] GRADE: [Excellent/Good/Developing]";
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: "claude-sonnet-4-20250514",
         max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: 'You are an experienced ELA teacher giving written feedback to a Grade 9 ESL student. Be warm, specific, encouraging, and professional.\n\nWriting prompt: '+prompt+'\n\nStudent response:\n'+journalText+'\n\nPlease provide:\n1. A brief overall comment on how well they responded to the prompt (2-3 sentences)\n2. One specific strength in their writing with an example from their text\n3. One clear, actionable improvement suggestion\n4. A suggested grade: Excellent (fully meets expectations with strong writing), Good (meets expectations), or Developing (partially meets expectations)\n\nFormat your response as:\nFEEDBACK: [your 3-part feedback in 4-6 sentences total, written directly to the student as "you"]\nGRADE: [Excellent/Good/Developing]'
-        }]
+        messages: [{ role: "user", content: aiPrompt }]
       })
     });
     const data = await res.json();
-    const reply = data.content?.[0]?.text || '';
-    
-    // Parse feedback and grade
+    const reply = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : "";
     const feedbackMatch = reply.match(/FEEDBACK:\s*([\s\S]*?)(?=GRADE:|$)/i);
     const gradeMatch = reply.match(/GRADE:\s*(Excellent|Good|Developing)/i);
-    
     if(feedbackMatch && feedbackMatch[1].trim()) {
       textarea.value = feedbackMatch[1].trim();
       saveFbDraft(fbId);
     }
-    if(gradeMatch && gradeEl) {
-      gradeEl.value = gradeMatch[1];
-    }
+    if(gradeMatch && gradeEl) { gradeEl.value = gradeMatch[1]; }
   } catch(e) {
-    alert('AI suggestion failed: ' + e.message);
+    alert("AI suggestion failed: " + e.message);
   } finally {
-    allBtns.forEach(b=>{ if(b.onclick && b.onclick.toString().includes(fbId)){ b.disabled=false; b.textContent='✨ AI suggestion'; } });
+    allBtns.forEach(function(b){ if(b.getAttribute("data-fbid")===fbId){ b.disabled=false; b.textContent="✨ AI suggestion"; }});
   }
 }
+
 
 async function loadData(){
   document.getElementById('lu').textContent='Loading...';
