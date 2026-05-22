@@ -216,7 +216,7 @@ app.post('/api/ai-feedback', async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+        'x-api-key': process.env.ANTHROPIC_API_KEY || process.env.anthropic_api_key || '',
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -235,6 +235,15 @@ app.post('/api/ai-feedback', async (req, res) => {
   }
 });
 
+// ── Debug env vars ───────────────────────────────────────────────────────────
+app.get('/api/debug-env', (req, res) => {
+  res.json({ 
+    hasKey: !!(process.env.ANTHROPIC_API_KEY),
+    keyLength: (process.env.ANTHROPIC_API_KEY || '').length,
+    keyStart: (process.env.ANTHROPIC_API_KEY || '').slice(0,8)
+  });
+});
+
 // ── Student page ──────────────────────────────────────────────────────────────
 app.get('/student/:slug', (req, res) => {
   const slug = req.params.slug;
@@ -247,6 +256,15 @@ app.get('/student/:slug', (req, res) => {
 app.get('*', (req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(dashboardPage());
+});
+
+// ── Debug env vars ───────────────────────────────────────────────────────────
+app.get('/api/debug-env', (req, res) => {
+  res.json({ 
+    hasKey: !!(process.env.ANTHROPIC_API_KEY),
+    keyLength: (process.env.ANTHROPIC_API_KEY || '').length,
+    keyStart: (process.env.ANTHROPIC_API_KEY || '').slice(0,8)
+  });
 });
 
 // ── Student page HTML ─────────────────────────────────────────────────────────
